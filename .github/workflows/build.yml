@@ -3,9 +3,14 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
 
-permissions:
-  contents: read
+env:
+  TAG: ${{ inputs.version || github.ref_name }}
 
 jobs:
   build:
@@ -27,6 +32,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - uses: actions/setup-python@v5
         with:
@@ -70,7 +77,7 @@ jobs:
         env:
           REPO_URL: https://github.com/KingYes/yt-dlp-gui
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ env.TAG }}"
           PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
           if [ -z "$PREV" ]; then
             LOG=$(git log --no-merges --format="%H %s" "$TAG")
@@ -113,7 +120,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
           body: ${{ steps.changelog.outputs.body }}
           files: |
             artifacts/yt-dlp-gui-windows.exe
