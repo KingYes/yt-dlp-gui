@@ -6,7 +6,7 @@ def main() -> None:
         return
     sys._yt_dlp_gui_running = True  # type: ignore[attr-defined]
 
-    from app import App
+    from src.app import App
 
     app = App()
     app.mainloop()

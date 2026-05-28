@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-import state as state_module
-from state import AppState
+import src.state as state_module
+from src.state import AppState
 
 
 @pytest.fixture(autouse=True)

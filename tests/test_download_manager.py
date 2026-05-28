@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from download_manager import (
+from src.download_manager import (
     DownloadManager,
     build_format_string,
     parse_chapters,
@@ -353,7 +353,7 @@ class TestDownloadOne:
 
     def test_success_returns_none(self) -> None:
         dm = DownloadManager()
-        with patch("download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
+        with patch("src.download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
             mock_ydl = MagicMock()
             mock_ydl_cls.return_value.__enter__ = MagicMock(return_value=mock_ydl)
             mock_ydl_cls.return_value.__exit__ = MagicMock(return_value=False)
@@ -372,12 +372,12 @@ class TestDownloadOne:
             if call_count < 3:
                 raise Exception(f"fail {call_count}")
 
-        with patch("download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
+        with patch("src.download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
             mock_ydl = MagicMock()
             mock_ydl.download.side_effect = side_effect
             mock_ydl_cls.return_value.__enter__ = MagicMock(return_value=mock_ydl)
             mock_ydl_cls.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("download_manager.time.sleep"):
+            with patch("src.download_manager.time.sleep"):
                 result = dm._download_one(0, "http://example.com", {}, lambda idx, d: None)
 
         assert result is None
@@ -386,12 +386,12 @@ class TestDownloadOne:
     def test_returns_error_after_max_retries(self) -> None:
         dm = DownloadManager()
 
-        with patch("download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
+        with patch("src.download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
             mock_ydl = MagicMock()
             mock_ydl.download.side_effect = Exception("persistent error")
             mock_ydl_cls.return_value.__enter__ = MagicMock(return_value=mock_ydl)
             mock_ydl_cls.return_value.__exit__ = MagicMock(return_value=False)
-            with patch("download_manager.time.sleep"):
+            with patch("src.download_manager.time.sleep"):
                 result = dm._download_one(0, "http://example.com", {}, lambda idx, d: None)
 
         assert result is not None
@@ -411,7 +411,7 @@ class TestDownloadOne:
         def progress_cb(idx: int, data: dict) -> None:
             received.append((idx, data))
 
-        with patch("download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
+        with patch("src.download_manager.yt_dlp.YoutubeDL") as mock_ydl_cls:
             mock_ydl = MagicMock()
 
             def fake_download(urls: list) -> None:

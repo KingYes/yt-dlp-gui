@@ -16,9 +16,9 @@ from pathlib import Path
 import customtkinter as ctk
 import requests
 
-from i18n import t
-from state import AppState
-from utils import get_bin_dir
+from .i18n import t
+from .state import AppState
+from .utils import get_bin_dir
 
 _CHUNK_SIZE = 64 * 1024
 

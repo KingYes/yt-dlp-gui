@@ -7,7 +7,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from i18n import t
+from .i18n import t
 
 try:
     import pystray
