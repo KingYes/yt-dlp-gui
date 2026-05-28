@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -130,7 +130,7 @@ class AppState:
         entry = {
             "title": title,
             "url": url,
-            "date": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "date": datetime.now(UTC).isoformat(timespec="seconds"),
             "bytes": size,
             "status": status,
         }

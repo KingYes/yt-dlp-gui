@@ -5,8 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
-
+from urllib.parse import parse_qs, urlparse
 
 _URL_PATTERN = re.compile(
     r"^https?://"

@@ -1,4 +1,3 @@
-import os
 import stat
 import sys
 import zipfile
@@ -14,7 +13,6 @@ from setup_wizard import (
     get_download_urls,
 )
 from utils import check_ffmpeg, get_bin_dir, get_ffmpeg_location
-
 
 # ──────────────────────── get_download_urls ────────────────────────
 

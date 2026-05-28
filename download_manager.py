@@ -1,12 +1,13 @@
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import yt_dlp
 
-from utils import build_download_section_range, get_ffmpeg_location, parse_rate_limit, burn_subtitles_into_video
+from utils import build_download_section_range, burn_subtitles_into_video, get_ffmpeg_location, parse_rate_limit
 
 _MAX_RETRIES = 2
 
@@ -205,7 +206,7 @@ FORMAT_PRESETS = {
 
 class DownloadManager:
     def __init__(self) -> None:
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._cancel_event = threading.Event()
         self._executor: ThreadPoolExecutor | None = None
 
@@ -374,7 +375,7 @@ class DownloadManager:
         format_key: str,
         output_dir: str,
         progress_callback: Callable[[dict], None],
-        done_callback: Callable[[Optional[str]], None],
+        done_callback: Callable[[str | None], None],
         split_chapters: bool = False,
         playlist: bool = False,
         settings: dict[str, Any] | None = None,
@@ -427,8 +428,8 @@ class DownloadManager:
         format_key: str,
         output_dir: str,
         progress_callback: Callable[[dict], None],
-        item_done_callback: Callable[[int, int, Optional[str]], None],
-        done_callback: Callable[[Optional[str]], None],
+        item_done_callback: Callable[[int, int, str | None], None],
+        done_callback: Callable[[str | None], None],
         split_chapters: bool = False,
         playlist: bool = False,
         settings: dict[str, Any] | None = None,
@@ -468,7 +469,7 @@ class DownloadManager:
                 if self._cancel_event.is_set():
                     done_callback("Download cancelled.")
                     return
-                last_exc: Optional[Exception] = None
+                last_exc: Exception | None = None
                 finished_files.clear()
                 for attempt in range(_MAX_RETRIES + 1):
                     if attempt > 0 and self._cancel_event.is_set():
@@ -504,8 +505,8 @@ class DownloadManager:
         output_dir: str,
         max_workers: int,
         progress_callback: Callable[[int, dict], None],
-        item_done_callback: Callable[[int, int, Optional[str]], None],
-        done_callback: Callable[[Optional[str]], None],
+        item_done_callback: Callable[[int, int, str | None], None],
+        done_callback: Callable[[str | None], None],
         split_chapters: bool = False,
         playlist: bool = False,
         settings: dict[str, Any] | None = None,
