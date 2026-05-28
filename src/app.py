@@ -26,7 +26,6 @@ from .layout_utils import _anchor_start, _c, _pad_end, _sticky_end, _sticky_star
 from .settings_window import SettingsWindow
 from .setup_wizard import SetupWizard
 from .state import AppState
-from .tray import TrayManager
 from .updater import APP_VERSION, check_for_update
 from .utils import (
     check_ffmpeg,
@@ -93,7 +92,6 @@ class App(ctk.CTk):
         self._input_mode: str = "single"
         self._current_item_index: int = 0
         self._total_items: int = 0
-        self._concurrent_mode: bool = False
 
         self._custom_format_enabled: bool = False
         self._available_video_formats: list[dict] = []
@@ -109,21 +107,15 @@ class App(ctk.CTk):
         self._chapter_select_all_var = ctk.BooleanVar(value=True)
         self._chapter_dialog: ctk.CTkToplevel | None = None
 
-        self._tray = TrayManager(on_show=self._tray_show, on_quit=self._tray_quit)
-        self._tray_notified_minimize: bool = False
-
         self._build_ui()
         self._restore_state()
         self._restore_geometry()
         self._setup_dnd()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.bind("<Unmap>", self._on_iconify)
 
         if settings.get("clipboard_monitor"):
             self._start_clipboard_monitor()
 
-        self._tray.start()
-        self._poll_tray()
         self._drain_main_queue()
         self.after(200, self._startup_checks)
 
@@ -643,7 +635,6 @@ class App(ctk.CTk):
         self._build_ui()
         self._restore_state()
         self._setup_dnd()
-        self._tray.update_tooltip(t("tray.tooltip"))
         self._refresh_status_bar()
 
     def _on_clipboard_setting_changed(self, enabled: bool) -> None:
@@ -834,46 +825,21 @@ class App(ctk.CTk):
             with contextlib.suppress(Exception):
                 self.geometry(geo)
 
-    # --------------------------------------------------- Tray / close
+    # --------------------------------------------------- Close
 
     def _on_close(self) -> None:
-        if self._manager.is_busy and self._tray.available:
-            self.withdraw()
-            if not self._tray_notified_minimize:
-                self._tray.notify(t("app.title"), t("notify.minimized"))
-                self._tray_notified_minimize = True
-            return
         try:
             self._shutdown()
         except Exception:
             self.destroy()
 
-    def _on_iconify(self, event: object) -> None:
-        if not self._tray.available:
-            return
-        if event and getattr(event, "widget", None) is self:
-            self.withdraw()
-
-    def _poll_tray(self) -> None:
-        self._tray.poll_events()
-        self.after(250, self._poll_tray)
-
-    def _tray_show(self) -> None:
-        self.deiconify()
-        self.focus()
-        self.lift()
-
-    def _tray_quit(self) -> None:
-        self._manager.cancel()
-        self._shutdown()
-
     def _shutdown(self) -> None:
+        self._manager.cancel()
         self._stop_clipboard_monitor()
         with contextlib.suppress(Exception):
             self._state.window_geometry = self.geometry()
         self._persist_queue()
         self._state.save()
-        self._tray.stop()
         self.destroy()
 
     # --------------------------------------------------- Actions

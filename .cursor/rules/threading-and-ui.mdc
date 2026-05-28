@@ -17,6 +17,6 @@ Use `queue.Queue[Callable[[], None]]` + `self.after(16, self._drain_main_queue)`
 - **Daemon threads only** — set `daemon=True` on all background `threading.Thread` instances.
 - **`DownloadManager` must never import or reference UI widgets.** Communicate results via callbacks (`progress_callback`, `item_done_callback`, `done_callback`).
 - **Cancellation** — use `threading.Event` (`_cancel_event`). Never kill threads.
-- **Tray callbacks** must never call Tkinter directly (causes fatal macOS crashes). Set `threading.Event` flags and poll them from the main thread via `self.after(250, self._poll_tray)`.
-- **Concurrent downloads** — use a coordinator thread + `ThreadPoolExecutor`. Cap `max_workers` from settings.
-- **`self.after()` timers** for periodic main-thread work (clipboard polling, queue processing, tray events). Keep intervals consistent with existing values (16 ms queue drain, 250 ms tray poll, 1000 ms clipboard).
+- **Single background thread per download session** — no thread pools. Sequential batch downloads use one thread iterating over URLs.
+- **Progress throttling** — `_on_progress` skips `downloading` events within 50 ms of the last one to reduce main-queue flooding.
+- **`self.after()` timers** for periodic main-thread work (clipboard polling, queue processing). Keep intervals consistent with existing values (16 ms queue drain, 1000 ms clipboard).
