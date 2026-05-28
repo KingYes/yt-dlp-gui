@@ -11,7 +11,7 @@ try:
     import pystray
 
     _HAS_PYSTRAY = True
-except ImportError:
+except Exception:
     pystray = None  # type: ignore[assignment]
     _HAS_PYSTRAY = False
 
