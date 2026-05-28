@@ -58,6 +58,8 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 - Detailed view: per-item progress bars with status icons
 - Retry individual failed items from the detailed view
 - Overall counter for batch downloads (e.g. "3 of 10")
+- Indeterminate progress bar and status text for chapter-based downloads
+- Post-processing status updates (e.g. merging, moving)
 
 ### Settings
 

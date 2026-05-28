@@ -638,6 +638,7 @@ class TestBuildBaseOpts:
         base = dm._build_base_opts("720p", "/out", split_chapters=True)
         full = dm._build_opts("720p", "/out", lambda d: None, split_chapters=True)
         del full["progress_hooks"]
+        del full["postprocessor_hooks"]
         assert base == full
 
 
@@ -948,7 +949,7 @@ class TestSelectedChaptersOpts:
     def test_selected_chapters_sets_download_ranges(self) -> None:
         opts = _build(selected_chapters=["Intro", "Outro"])
         assert "download_ranges" in opts
-        assert opts["force_keyframes_at_cuts"] is True
+        assert "force_keyframes_at_cuts" not in opts
 
     def test_section_takes_precedence_over_chapters(self) -> None:
         opts = _build(

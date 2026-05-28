@@ -1,3 +1,7 @@
+import contextlib
+import glob
+import os
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -204,6 +208,63 @@ FORMAT_PRESETS = {
 }
 
 
+class _FileProgressPoller:
+    """Polls .part file size to synthesise progress events for range downloads.
+
+    yt-dlp does not emit ``downloading`` progress-hook events when
+    ``download_ranges`` is active.  This poller watches the output directory
+    for ``.part`` files whose names start with *prefix*, samples their size
+    every *interval* seconds, and calls *callback* with a synthetic progress
+    dict that the UI can render like a normal download event.
+    """
+
+    def __init__(
+        self,
+        output_dir: str,
+        callback: Callable[[dict], None],
+        cancel_event: threading.Event,
+        interval: float = 0.5,
+    ) -> None:
+        self._pattern = os.path.join(glob.escape(output_dir), "*.part")
+        self._callback = callback
+        self._cancel = cancel_event
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._prev_size = 0
+        self._start_time = 0.0
+
+    def start(self) -> None:
+        self._stop.clear()
+        self._start_time = time.monotonic()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        while not self._stop.is_set() and not self._cancel.is_set():
+            total_size = 0
+            for path in glob.glob(self._pattern):
+                with contextlib.suppress(OSError):
+                    total_size += os.path.getsize(path)
+            if total_size > 0 and total_size != self._prev_size:
+                elapsed = time.monotonic() - self._start_time
+                speed = total_size / elapsed if elapsed > 0 else 0
+                self._callback({
+                    "status": "downloading",
+                    "downloaded_bytes": total_size,
+                    "total_bytes": 0,
+                    "speed": speed,
+                    "eta": 0,
+                    "filename": "",
+                    "title": "",
+                })
+                self._prev_size = total_size
+            self._stop.wait(self._interval)
+
+
 class DownloadManager:
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
@@ -245,6 +306,9 @@ class DownloadManager:
         )
         opts["progress_hooks"] = [
             lambda d: self._on_progress(d, progress_callback, finished_files=finished_files)
+        ]
+        opts["postprocessor_hooks"] = [
+            lambda d: self._on_postprocessor(d, progress_callback)
         ]
         return opts
 
@@ -295,10 +359,10 @@ class DownloadManager:
             )
             ydl_opts["force_keyframes_at_cuts"] = True
         elif selected_chapters:
+            escaped = [re.escape(title) for title in selected_chapters]
             ydl_opts["download_ranges"] = yt_dlp.utils.download_range_func(
-                selected_chapters, None
+                escaped, None
             )
-            ydl_opts["force_keyframes_at_cuts"] = True
 
         rate = parse_rate_limit(settings.get("speed_limit", ""))
         if rate:
@@ -405,7 +469,16 @@ class DownloadManager:
             selected_subtitle_langs=selected_subtitle_langs,
         )
 
+        poller: _FileProgressPoller | None = None
+        if selected_chapters:
+            poller = _FileProgressPoller(
+                output_dir, progress_callback,
+                self._cancel_event,
+            )
+
         def _worker() -> None:
+            if poller:
+                poller.start()
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
@@ -418,6 +491,9 @@ class DownloadManager:
                     done_callback(None)
             except Exception as exc:
                 done_callback(str(exc))
+            finally:
+                if poller:
+                    poller.stop()
 
         self._thread = threading.Thread(target=_worker, daemon=True)
         self._thread.start()
@@ -464,36 +540,49 @@ class DownloadManager:
         )
         total = len(urls)
 
+        poller: _FileProgressPoller | None = None
+        if selected_chapters:
+            poller = _FileProgressPoller(
+                output_dir, progress_callback,
+                self._cancel_event,
+            )
+
         def _worker() -> None:
-            for i, url in enumerate(urls, start=1):
-                if self._cancel_event.is_set():
-                    done_callback("Download cancelled.")
-                    return
-                last_exc: Exception | None = None
-                finished_files.clear()
-                for attempt in range(_MAX_RETRIES + 1):
-                    if attempt > 0 and self._cancel_event.is_set():
+            if poller:
+                poller.start()
+            try:
+                for i, url in enumerate(urls, start=1):
+                    if self._cancel_event.is_set():
                         done_callback("Download cancelled.")
                         return
-                    try:
-                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                            ydl.download([url])
-                        if self._cancel_event.is_set():
+                    last_exc: Exception | None = None
+                    finished_files.clear()
+                    for attempt in range(_MAX_RETRIES + 1):
+                        if attempt > 0 and self._cancel_event.is_set():
                             done_callback("Download cancelled.")
                             return
-                        if do_burn and finished_files:
-                            for fpath in set(finished_files):
-                                self._run_burn(fpath, settings)
-                        item_done_callback(i, total, None)
-                        last_exc = None
-                        break
-                    except Exception as exc:
-                        last_exc = exc
-                        if attempt < _MAX_RETRIES:
-                            time.sleep(2)
-                if last_exc is not None:
-                    item_done_callback(i, total, str(last_exc))
-            done_callback(None)
+                        try:
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                ydl.download([url])
+                            if self._cancel_event.is_set():
+                                done_callback("Download cancelled.")
+                                return
+                            if do_burn and finished_files:
+                                for fpath in set(finished_files):
+                                    self._run_burn(fpath, settings)
+                            item_done_callback(i, total, None)
+                            last_exc = None
+                            break
+                        except Exception as exc:
+                            last_exc = exc
+                            if attempt < _MAX_RETRIES:
+                                time.sleep(2)
+                    if last_exc is not None:
+                        item_done_callback(i, total, str(last_exc))
+                done_callback(None)
+            finally:
+                if poller:
+                    poller.stop()
 
         self._thread = threading.Thread(target=_worker, daemon=True)
         self._thread.start()
@@ -694,3 +783,19 @@ class DownloadManager:
 
         if data.get("status") == "finished" and filename and finished_files is not None:
             finished_files.append(filename)
+
+    @staticmethod
+    def _on_postprocessor(
+        data: dict,
+        callback: Callable[[dict], None],
+    ) -> None:
+        status = data.get("status", "")
+        postprocessor = data.get("postprocessor", "")
+        info = data.get("info_dict") or {}
+        if status == "started":
+            callback({
+                "status": "postprocessing",
+                "postprocessor": postprocessor,
+                "filename": info.get("filepath", ""),
+                "title": info.get("title", ""),
+            })

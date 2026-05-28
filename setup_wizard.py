@@ -221,7 +221,9 @@ class SetupWizard(ctk.CTkToplevel):
 
         try:
             for i, url in enumerate(urls):
-                self._call_on_main(lambda u=url: self._set_status(t("wizard.downloading", name=Path(u).name or "ffmpeg")))
+                def _status_cb(u: str = url) -> None:
+                    self._set_status(t("wizard.downloading", name=Path(u).name or "ffmpeg"))
+                self._call_on_main(_status_cb)
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=self._suffix_for(url)) as tmp:
                     tmp_path = Path(tmp.name)
@@ -240,7 +242,9 @@ class SetupWizard(ctk.CTkToplevel):
                                 progress = downloaded / total
                                 if len(urls) > 1:
                                     progress = (i + progress) / len(urls)
-                                self._call_on_main(lambda p=progress: self._progress.set(p))
+                                def _prog_cb(p: float = progress) -> None:
+                                    self._progress.set(p)
+                                self._call_on_main(_prog_cb)
 
                     self._call_on_main(lambda: self._set_status(t("wizard.extracting")))
 
@@ -264,11 +268,17 @@ class SetupWizard(ctk.CTkToplevel):
             self._call_on_main(self._on_success)
 
         except requests.RequestException as exc:
-            self._call_on_main(lambda e=exc: self._on_error(t("wizard.error_download", error=e)))
+            def _dl_err(e: Exception = exc) -> None:
+                self._on_error(t("wizard.error_download", error=e))
+            self._call_on_main(_dl_err)
         except (zipfile.BadZipFile, tarfile.TarError) as exc:
-            self._call_on_main(lambda e=exc: self._on_error(t("wizard.error_extraction", error=e)))
+            def _ext_err(e: Exception = exc) -> None:
+                self._on_error(t("wizard.error_extraction", error=e))
+            self._call_on_main(_ext_err)
         except OSError as exc:
-            self._call_on_main(lambda e=exc: self._on_error(t("wizard.error_filesystem", error=e)))
+            def _fs_err(e: Exception = exc) -> None:
+                self._on_error(t("wizard.error_filesystem", error=e))
+            self._call_on_main(_fs_err)
 
     def _suffix_for(self, url: str) -> str:
         if ".tar.xz" in url:

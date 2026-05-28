@@ -1009,7 +1009,9 @@ class App(ctk.CTk):
         self._cancel_btn.configure(state="normal")
 
         def on_progress(data: dict) -> None:
-            self._call_on_main(lambda d=data: self._update_retry_progress(d, item_index))
+            def _cb(d: dict = data) -> None:
+                self._update_retry_progress(d, item_index)
+            self._call_on_main(_cb)
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
             self._call_on_main(lambda: self._retry_item_finished(item_index, error))
@@ -1255,23 +1257,15 @@ class App(ctk.CTk):
             self._subtitle_summary_frame.grid_forget()
             return
 
-        default_langs = [
-            lang.strip()
-            for lang in self._state.settings.get("subtitle_languages", "en").split(",")
-            if lang.strip()
-        ]
-
         for entry in subs["manual"]:
             code = entry["code"]
-            pre_selected = code in default_langs or "all" in default_langs
-            var = ctk.BooleanVar(value=pre_selected)
+            var = ctk.BooleanVar(value=False)
             self._subtitle_vars[code] = var
 
         for entry in subs["auto"]:
             code = entry["code"]
             key = f"auto:{code}"
-            pre_selected = code in default_langs or "all" in default_langs
-            var = ctk.BooleanVar(value=pre_selected)
+            var = ctk.BooleanVar(value=False)
             self._subtitle_vars[key] = var
 
         self._subtitle_select_all_var.set(False)
@@ -1311,7 +1305,6 @@ class App(ctk.CTk):
         dialog.geometry("400x350")
         dialog.minsize(320, 200)
         dialog.resizable(True, True)
-        dialog.transient(self)
         self._subtitle_dialog = dialog
 
         dialog.grid_columnconfigure(0, weight=1)
@@ -1353,7 +1346,6 @@ class App(ctk.CTk):
                 ctk.CTkCheckBox(
                     scroll, text=label, variable=var,
                     font=ctk.CTkFont(size=12),
-                    command=self._update_subtitle_summary,
                 ).grid(row=row, column=0, sticky=_sticky_start(), pady=1)
                 row += 1
 
@@ -1372,15 +1364,22 @@ class App(ctk.CTk):
                 ctk.CTkCheckBox(
                     scroll, text=label, variable=var,
                     font=ctk.CTkFont(size=12),
-                    command=self._update_subtitle_summary,
                 ).grid(row=row, column=0, sticky=_sticky_start(), pady=1)
                 row += 1
+
+        dialog.protocol("WM_DELETE_WINDOW", self._on_subtitle_dialog_close)
+
+    def _on_subtitle_dialog_close(self) -> None:
+        """Update summary when the subtitle picker dialog is closed."""
+        if self._subtitle_dialog and self._subtitle_dialog.winfo_exists():
+            self._subtitle_dialog.destroy()
+        self._subtitle_dialog = None
+        self._update_subtitle_summary()
 
     def _on_subtitle_select_all(self) -> None:
         select = self._subtitle_select_all_var.get()
         for var in self._subtitle_vars.values():
             var.set(select)
-        self._update_subtitle_summary()
 
     def _get_selected_subtitle_langs(self) -> list[str] | None:
         """Return list of selected subtitle language codes, or None if picker not used."""
@@ -1446,7 +1445,6 @@ class App(ctk.CTk):
         dialog.geometry("400x350")
         dialog.minsize(320, 200)
         dialog.resizable(True, True)
-        dialog.transient(self)
         self._chapter_dialog = dialog
 
         dialog.grid_columnconfigure(0, weight=1)
@@ -1479,14 +1477,21 @@ class App(ctk.CTk):
             ctk.CTkCheckBox(
                 scroll, text=label, variable=var,
                 font=ctk.CTkFont(size=12),
-                command=self._update_chapter_summary,
             ).grid(row=i, column=0, sticky=_sticky_start(), pady=1)
+
+        dialog.protocol("WM_DELETE_WINDOW", self._on_chapter_dialog_close)
+
+    def _on_chapter_dialog_close(self) -> None:
+        """Update summary when the chapter picker dialog is closed."""
+        if self._chapter_dialog and self._chapter_dialog.winfo_exists():
+            self._chapter_dialog.destroy()
+        self._chapter_dialog = None
+        self._update_chapter_summary()
 
     def _on_chapter_select_all(self) -> None:
         select = self._chapter_select_all_var.get()
         for var in self._chapter_vars:
             var.set(select)
-        self._update_chapter_summary()
 
     def _get_selected_chapters(self) -> list[str] | None:
         """Return list of selected chapter titles, or None if all selected or picker not used."""
@@ -2057,9 +2062,18 @@ class App(ctk.CTk):
             pp_parts.append(t("log.pp_burn_subs"))
         pp_info = f" [{', '.join(pp_parts)}]" if pp_parts else ""
 
+        selected_chapters = self._get_selected_chapters()
+        selected_subtitle_langs = self._get_selected_subtitle_langs()
+
         self._log(t("log.starting_download", count=len(urls), mode=mode, section=section_info, format=format_display, pp=pp_info))
+        if selected_chapters:
+            self._log(t("log.chapters_selected", count=len(selected_chapters)))
         self._tray.update_tooltip(t("notify.downloading", done=0, total=len(urls)))
         self._progress_bar.set(0)
+        if selected_chapters:
+            self._progress_bar.configure(mode="indeterminate")
+            self._progress_bar.start()
+            self._progress_detail.configure(text=t("progress.downloading_chapters"))
         self._download_btn.configure(state="disabled")
         self._cancel_btn.configure(state="normal")
         self._open_folder_btn.configure(state="disabled")
@@ -2072,9 +2086,6 @@ class App(ctk.CTk):
 
         def on_done(error: str | None) -> None:
             self._call_on_main(lambda: self._download_finished(error))
-
-        selected_chapters = self._get_selected_chapters()
-        selected_subtitle_langs = self._get_selected_subtitle_langs()
 
         common_kwargs: dict = dict(
             split_chapters=split_chapters,
@@ -2093,7 +2104,9 @@ class App(ctk.CTk):
             self._concurrent_mode = True
 
             def on_progress_concurrent(item_index: int, data: dict) -> None:
-                self._call_on_main(lambda idx=item_index, d=data: self._update_progress_concurrent(idx, d))
+                def _cb(idx: int = item_index, d: dict = data) -> None:
+                    self._update_progress_concurrent(idx, d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch_concurrent(
                 urls, format_key, self._output_dir,
@@ -2103,7 +2116,9 @@ class App(ctk.CTk):
             )
         else:
             def on_progress(data: dict) -> None:
-                self._call_on_main(lambda d=data: self._update_progress(d))
+                def _cb(d: dict = data) -> None:
+                    self._update_progress(d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch(
                 urls, format_key, self._output_dir,
@@ -2175,7 +2190,9 @@ class App(ctk.CTk):
             self._concurrent_mode = True
 
             def on_progress_concurrent(item_index: int, data: dict) -> None:
-                self._call_on_main(lambda idx=item_index, d=data: self._update_progress_concurrent(idx, d))
+                def _cb(idx: int = item_index, d: dict = data) -> None:
+                    self._update_progress_concurrent(idx, d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch_concurrent(
                 urls, format_key, output_dir,
@@ -2185,7 +2202,9 @@ class App(ctk.CTk):
             )
         else:
             def on_progress(data: dict) -> None:
-                self._call_on_main(lambda d=data: self._update_progress(d))
+                def _cb(d: dict = data) -> None:
+                    self._update_progress(d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch(
                 urls, format_key, output_dir,
@@ -2205,6 +2224,13 @@ class App(ctk.CTk):
 
     def _update_progress(self, data: dict) -> None:
         """Progress callback for sequential (non-concurrent) downloads."""
+        if data.get("status") == "postprocessing":
+            pp = data.get("postprocessor", "")
+            self._progress_detail.configure(
+                text=t("progress.postprocessing", postprocessor=pp) if pp else t("progress.processing")
+            )
+            return
+
         title = data.get("title")
         if title and title != self._video_title:
             self._video_title = title
@@ -2217,10 +2243,12 @@ class App(ctk.CTk):
 
         total = data["total_bytes"]
         downloaded = data["downloaded_bytes"]
+        is_indeterminate = str(self._progress_bar.cget("mode")) == "indeterminate"
 
         if total and total > 0:
             fraction = downloaded / total
-            self._progress_bar.set(fraction)
+            if not is_indeterminate:
+                self._progress_bar.set(fraction)
             pct = f"{fraction * 100:.1f}%"
         else:
             fraction = 0
@@ -2232,6 +2260,9 @@ class App(ctk.CTk):
 
         if data["status"] == "finished":
             self._accumulated_bytes += data["total_bytes"] or data["downloaded_bytes"]
+            if is_indeterminate:
+                self._progress_bar.stop()
+                self._progress_bar.configure(mode="determinate")
             self._progress_bar.set(1)
             self._progress_detail.configure(text=t("progress.processing"))
             fraction = 1.0
@@ -2252,6 +2283,8 @@ class App(ctk.CTk):
     def _update_progress_concurrent(self, item_index: int, data: dict) -> None:
         """Progress callback for concurrent downloads -- routes by item index."""
         if item_index >= len(self._download_items):
+            return
+        if data.get("status") == "postprocessing":
             return
 
         item = self._download_items[item_index]
@@ -2359,6 +2392,8 @@ class App(ctk.CTk):
             self._refresh_status_bar()
 
     def _download_finished(self, error: str | None) -> None:
+        self._progress_bar.stop()
+        self._progress_bar.configure(mode="determinate")
         self._download_btn.configure(state="normal")
         self._cancel_btn.configure(state="disabled")
         self._open_folder_btn.configure(state="normal")
