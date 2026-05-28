@@ -49,7 +49,7 @@ class App(ctk.CTk):
 
         self.title("yt-dlp GUI")
         self.geometry("780x640")
-        self.minsize(640, 560)
+        self.minsize(640, 480)
 
         ctk.set_default_color_theme("blue")
 
@@ -135,7 +135,7 @@ class App(ctk.CTk):
             os.environ["PATH"] = bin_str + os.pathsep + os.environ.get("PATH", "")
 
     def _show_update_banner(self, version: str, url: str) -> None:
-        self._update_banner = ctk.CTkFrame(self, fg_color="#d1ecf1", corner_radius=6)
+        self._update_banner = ctk.CTkFrame(self._scroll_container, fg_color="#d1ecf1", corner_radius=6)
         self._update_banner.grid(row=0, column=0, padx=16, pady=(8, 0), sticky="ew")
         self._update_banner.grid_columnconfigure(0, weight=1)
 
@@ -172,7 +172,13 @@ class App(ctk.CTk):
     # ------------------------------------------------------------------ UI
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(6, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self._scroll_container = ctk.CTkScrollableFrame(
+            self, fg_color="transparent",
+        )
+        self._scroll_container.grid(row=0, column=0, sticky="nsew")
+        self._scroll_container.grid_columnconfigure(0, weight=1)
 
         self._build_url_frame(row=1)
         self._build_format_frame(row=2)
@@ -184,7 +190,7 @@ class App(ctk.CTk):
 
     # -- URL input
     def _build_url_frame(self, row: int) -> None:
-        self._url_frame = ctk.CTkFrame(self)
+        self._url_frame = ctk.CTkFrame(self._scroll_container)
         self._url_frame.grid(row=row, column=0, padx=16, pady=(16, 8), sticky="ew")
         self._url_frame.grid_columnconfigure(0, weight=1)
 
@@ -235,7 +241,7 @@ class App(ctk.CTk):
 
     # -- Format selection + download
     def _build_format_frame(self, row: int) -> None:
-        frame = ctk.CTkFrame(self)
+        frame = ctk.CTkFrame(self._scroll_container)
         frame.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
         frame.grid_columnconfigure(1, weight=1)
 
@@ -413,61 +419,47 @@ class App(ctk.CTk):
         )
         self._burn_sub_checkbox.grid(row=0, column=4, padx=(0, 8))
 
-        # Subtitle language picker (hidden until preview)
-        self._subtitle_picker_frame = ctk.CTkFrame(frame)
-        self._subtitle_picker_header = ctk.CTkFrame(self._subtitle_picker_frame, fg_color="transparent")
-        self._subtitle_picker_header.grid(row=0, column=0, padx=8, pady=(6, 2), sticky="ew")
-        self._subtitle_picker_header.grid_columnconfigure(0, weight=1)
+        # Subtitle summary row (hidden until preview)
+        self._subtitle_summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        self._subtitle_summary_frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(
-            self._subtitle_picker_header, text="Subtitle Languages",
-            font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
-        ).grid(row=0, column=0, sticky="w")
+        self._subtitle_summary_label = ctk.CTkLabel(
+            self._subtitle_summary_frame, text="Subtitles: none selected",
+            font=ctk.CTkFont(size=12), anchor="w",
+        )
+        self._subtitle_summary_label.grid(row=0, column=0, sticky="w")
+
+        self._subtitle_edit_btn = ctk.CTkButton(
+            self._subtitle_summary_frame, text="Edit…", width=60, height=24,
+            font=ctk.CTkFont(size=11), command=self._open_subtitle_picker_dialog,
+        )
+        self._subtitle_edit_btn.grid(row=0, column=1, padx=(8, 0))
 
         self._subtitle_select_all_var = ctk.BooleanVar(value=False)
-        self._subtitle_select_all_btn = ctk.CTkCheckBox(
-            self._subtitle_picker_header, text="Select All",
-            variable=self._subtitle_select_all_var,
-            font=ctk.CTkFont(size=11), command=self._on_subtitle_select_all,
+        self._subtitle_dialog: ctk.CTkToplevel | None = None
+
+        # Chapter summary row (hidden until preview)
+        self._chapter_summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        self._chapter_summary_frame.grid_columnconfigure(0, weight=1)
+
+        self._chapter_summary_label = ctk.CTkLabel(
+            self._chapter_summary_frame, text="Chapters: all selected",
+            font=ctk.CTkFont(size=12), anchor="w",
         )
-        self._subtitle_select_all_btn.grid(row=0, column=1, padx=(8, 0))
+        self._chapter_summary_label.grid(row=0, column=0, sticky="w")
 
-        self._subtitle_scroll = ctk.CTkScrollableFrame(
-            self._subtitle_picker_frame, height=100,
+        self._chapter_edit_btn = ctk.CTkButton(
+            self._chapter_summary_frame, text="Edit…", width=60, height=24,
+            font=ctk.CTkFont(size=11), command=self._open_chapter_picker_dialog,
         )
-        self._subtitle_scroll.grid(row=1, column=0, padx=8, pady=(0, 8), sticky="ew")
-        self._subtitle_scroll.grid_columnconfigure(0, weight=1)
-        self._subtitle_picker_frame.grid_columnconfigure(0, weight=1)
-
-        # Chapter picker (hidden until preview)
-        self._chapter_picker_frame = ctk.CTkFrame(frame)
-        self._chapter_picker_header = ctk.CTkFrame(self._chapter_picker_frame, fg_color="transparent")
-        self._chapter_picker_header.grid(row=0, column=0, padx=8, pady=(6, 2), sticky="ew")
-        self._chapter_picker_header.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            self._chapter_picker_header, text="Chapters",
-            font=ctk.CTkFont(size=12, weight="bold"), anchor="w",
-        ).grid(row=0, column=0, sticky="w")
+        self._chapter_edit_btn.grid(row=0, column=1, padx=(8, 0))
 
         self._chapter_select_all_var = ctk.BooleanVar(value=True)
-        self._chapter_select_all_btn = ctk.CTkCheckBox(
-            self._chapter_picker_header, text="Select All",
-            variable=self._chapter_select_all_var,
-            font=ctk.CTkFont(size=11), command=self._on_chapter_select_all,
-        )
-        self._chapter_select_all_btn.grid(row=0, column=1, padx=(8, 0))
-
-        self._chapter_scroll = ctk.CTkScrollableFrame(
-            self._chapter_picker_frame, height=120,
-        )
-        self._chapter_scroll.grid(row=1, column=0, padx=8, pady=(0, 8), sticky="ew")
-        self._chapter_scroll.grid_columnconfigure(0, weight=1)
-        self._chapter_picker_frame.grid_columnconfigure(0, weight=1)
+        self._chapter_dialog: ctk.CTkToplevel | None = None
 
     # -- Output folder
     def _build_output_frame(self, row: int) -> None:
-        frame = ctk.CTkFrame(self)
+        frame = ctk.CTkFrame(self._scroll_container)
         frame.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
         frame.grid_columnconfigure(1, weight=1)
 
@@ -489,7 +481,7 @@ class App(ctk.CTk):
 
     # -- Progress bar
     def _build_progress_frame(self, row: int) -> None:
-        self._progress_frame = ctk.CTkFrame(self)
+        self._progress_frame = ctk.CTkFrame(self._scroll_container)
         self._progress_frame.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
         self._progress_frame.grid_columnconfigure(0, weight=1)
 
@@ -558,7 +550,7 @@ class App(ctk.CTk):
 
     # -- Queue panel
     def _build_queue_panel(self, row: int) -> None:
-        self._queue_panel = ctk.CTkFrame(self)
+        self._queue_panel = ctk.CTkFrame(self._scroll_container)
         self._queue_panel.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
         self._queue_panel.grid_columnconfigure(0, weight=1)
 
@@ -713,8 +705,8 @@ class App(ctk.CTk):
 
     # -- Log / status area
     def _build_log_frame(self, row: int) -> None:
-        frame = ctk.CTkFrame(self)
-        frame.grid(row=row, column=0, padx=16, pady=(4, 4), sticky="nsew")
+        frame = ctk.CTkFrame(self._scroll_container)
+        frame.grid(row=row, column=0, padx=16, pady=(4, 4), sticky="ew")
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
@@ -743,7 +735,7 @@ class App(ctk.CTk):
 
     # -- Status bar
     def _build_status_bar(self, row: int) -> None:
-        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar = ctk.CTkFrame(self._scroll_container, fg_color="transparent")
         bar.grid(row=row, column=0, padx=20, pady=(0, 6), sticky="ew")
         bar.grid_columnconfigure(0, weight=1)
 
@@ -1165,17 +1157,14 @@ class App(ctk.CTk):
 
     # ------------------------------------------------- Subtitle picker
     def _populate_subtitle_picker(self, info: dict) -> None:
-        """Parse subtitles from info_dict and populate the picker UI."""
+        """Parse subtitles from info_dict and show summary row."""
         subs = parse_subtitles(info)
         self._available_subtitles = subs
         self._subtitle_vars.clear()
 
-        for widget in self._subtitle_scroll.winfo_children():
-            widget.destroy()
-
         has_any = bool(subs["manual"] or subs["auto"])
         if not has_any:
-            self._subtitle_picker_frame.grid_forget()
+            self._subtitle_summary_frame.grid_forget()
             return
 
         default_langs = [
@@ -1184,29 +1173,105 @@ class App(ctk.CTk):
             if lang.strip()
         ]
 
+        for entry in subs["manual"]:
+            code = entry["code"]
+            pre_selected = code in default_langs or "all" in default_langs
+            var = ctk.BooleanVar(value=pre_selected)
+            self._subtitle_vars[code] = var
+
+        for entry in subs["auto"]:
+            code = entry["code"]
+            key = f"auto:{code}"
+            pre_selected = code in default_langs or "all" in default_langs
+            var = ctk.BooleanVar(value=pre_selected)
+            self._subtitle_vars[key] = var
+
+        self._subtitle_select_all_var.set(False)
+        self._update_subtitle_summary()
+        self._subtitle_summary_frame.grid(
+            row=5, column=0, columnspan=4, padx=12, pady=(0, 6), sticky="ew",
+        )
+
+    def _hide_subtitle_picker(self) -> None:
+        self._subtitle_summary_frame.grid_forget()
+        self._available_subtitles = {"manual": [], "auto": []}
+        self._subtitle_vars.clear()
+        if self._subtitle_dialog and self._subtitle_dialog.winfo_exists():
+            self._subtitle_dialog.destroy()
+        self._subtitle_dialog = None
+
+    def _update_subtitle_summary(self) -> None:
+        """Update the subtitle summary label with current selection count."""
+        total = len(self._subtitle_vars)
+        selected = sum(1 for v in self._subtitle_vars.values() if v.get())
+        if selected == 0:
+            text = f"Subtitles: none selected (of {total})"
+        elif selected == total:
+            text = f"Subtitles: all selected ({total})"
+        else:
+            text = f"Subtitles: {selected} of {total} selected"
+        self._subtitle_summary_label.configure(text=text)
+
+    def _open_subtitle_picker_dialog(self) -> None:
+        """Open or focus the non-modal subtitle picker dialog."""
+        if self._subtitle_dialog and self._subtitle_dialog.winfo_exists():
+            self._subtitle_dialog.focus()
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Select Subtitles")
+        dialog.geometry("400x350")
+        dialog.minsize(320, 200)
+        dialog.resizable(True, True)
+        dialog.transient(self)
+        self._subtitle_dialog = dialog
+
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+
+        header = ctk.CTkFrame(dialog, fg_color="transparent")
+        header.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
+        header.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            header, text="Subtitle Languages",
+            font=ctk.CTkFont(size=13, weight="bold"), anchor="w",
+        ).grid(row=0, column=0, sticky="w")
+
+        select_all_btn = ctk.CTkCheckBox(
+            header, text="Select All",
+            variable=self._subtitle_select_all_var,
+            font=ctk.CTkFont(size=11), command=self._on_subtitle_select_all,
+        )
+        select_all_btn.grid(row=0, column=1, padx=(8, 0))
+
+        scroll = ctk.CTkScrollableFrame(dialog)
+        scroll.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
+
+        subs = self._available_subtitles
         row = 0
         if subs["manual"]:
             ctk.CTkLabel(
-                self._subtitle_scroll, text="Manual:",
+                scroll, text="Manual:",
                 font=ctk.CTkFont(size=11, weight="bold"), anchor="w",
             ).grid(row=row, column=0, sticky="w", pady=(2, 2))
             row += 1
             for entry in subs["manual"]:
                 code = entry["code"]
                 name = entry["name"]
-                pre_selected = code in default_langs or "all" in default_langs
-                var = ctk.BooleanVar(value=pre_selected)
-                self._subtitle_vars[code] = var
+                var = self._subtitle_vars[code]
                 label = f"{name} ({code})" if name != code else code
                 ctk.CTkCheckBox(
-                    self._subtitle_scroll, text=label, variable=var,
+                    scroll, text=label, variable=var,
                     font=ctk.CTkFont(size=12),
+                    command=self._update_subtitle_summary,
                 ).grid(row=row, column=0, sticky="w", pady=1)
                 row += 1
 
         if subs["auto"]:
             ctk.CTkLabel(
-                self._subtitle_scroll, text="Auto-generated:",
+                scroll, text="Auto-generated:",
                 font=ctk.CTkFont(size=11, weight="bold"), anchor="w",
             ).grid(row=row, column=0, sticky="w", pady=(6, 2))
             row += 1
@@ -1214,30 +1279,20 @@ class App(ctk.CTk):
                 code = entry["code"]
                 name = entry["name"]
                 key = f"auto:{code}"
-                pre_selected = code in default_langs or "all" in default_langs
-                var = ctk.BooleanVar(value=pre_selected)
-                self._subtitle_vars[key] = var
+                var = self._subtitle_vars[key]
                 label = f"{name} ({code})" if name != code else code
                 ctk.CTkCheckBox(
-                    self._subtitle_scroll, text=label, variable=var,
+                    scroll, text=label, variable=var,
                     font=ctk.CTkFont(size=12),
+                    command=self._update_subtitle_summary,
                 ).grid(row=row, column=0, sticky="w", pady=1)
                 row += 1
-
-        self._subtitle_select_all_var.set(False)
-        self._subtitle_picker_frame.grid(
-            row=5, column=0, columnspan=4, padx=12, pady=(0, 6), sticky="ew",
-        )
-
-    def _hide_subtitle_picker(self) -> None:
-        self._subtitle_picker_frame.grid_forget()
-        self._available_subtitles = {"manual": [], "auto": []}
-        self._subtitle_vars.clear()
 
     def _on_subtitle_select_all(self) -> None:
         select = self._subtitle_select_all_var.get()
         for var in self._subtitle_vars.values():
             var.set(select)
+        self._update_subtitle_summary()
 
     def _get_selected_subtitle_langs(self) -> list[str] | None:
         """Return list of selected subtitle language codes, or None if picker not used."""
@@ -1253,42 +1308,97 @@ class App(ctk.CTk):
 
     # ------------------------------------------------- Chapter picker
     def _populate_chapter_picker(self, info: dict) -> None:
-        """Parse chapters from info_dict and populate the picker UI."""
+        """Parse chapters from info_dict and show summary row."""
         chapters = parse_chapters(info)
         self._available_chapters = chapters
         self._chapter_vars.clear()
 
-        for widget in self._chapter_scroll.winfo_children():
-            widget.destroy()
-
         if not chapters:
-            self._chapter_picker_frame.grid_forget()
+            self._chapter_summary_frame.grid_forget()
             return
 
-        for i, ch in enumerate(chapters):
+        for _ch in chapters:
             var = ctk.BooleanVar(value=True)
             self._chapter_vars.append(var)
-            time_range = format_chapter_range(ch["start_time"], ch["end_time"])
-            label = f"{i + 1}. {ch['title']} ({time_range})"
-            ctk.CTkCheckBox(
-                self._chapter_scroll, text=label, variable=var,
-                font=ctk.CTkFont(size=12),
-            ).grid(row=i, column=0, sticky="w", pady=1)
 
         self._chapter_select_all_var.set(True)
-        self._chapter_picker_frame.grid(
+        self._update_chapter_summary()
+        self._chapter_summary_frame.grid(
             row=6, column=0, columnspan=4, padx=12, pady=(0, 6), sticky="ew",
         )
 
     def _hide_chapter_picker(self) -> None:
-        self._chapter_picker_frame.grid_forget()
+        self._chapter_summary_frame.grid_forget()
         self._available_chapters = []
         self._chapter_vars.clear()
+        if self._chapter_dialog and self._chapter_dialog.winfo_exists():
+            self._chapter_dialog.destroy()
+        self._chapter_dialog = None
+
+    def _update_chapter_summary(self) -> None:
+        """Update the chapter summary label with current selection count."""
+        total = len(self._chapter_vars)
+        selected = sum(1 for v in self._chapter_vars if v.get())
+        if selected == total:
+            text = f"Chapters: all selected ({total})"
+        elif selected == 0:
+            text = f"Chapters: none selected (of {total})"
+        else:
+            text = f"Chapters: {selected} of {total} selected"
+        self._chapter_summary_label.configure(text=text)
+
+    def _open_chapter_picker_dialog(self) -> None:
+        """Open or focus the non-modal chapter picker dialog."""
+        if self._chapter_dialog and self._chapter_dialog.winfo_exists():
+            self._chapter_dialog.focus()
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Select Chapters")
+        dialog.geometry("400x350")
+        dialog.minsize(320, 200)
+        dialog.resizable(True, True)
+        dialog.transient(self)
+        self._chapter_dialog = dialog
+
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+
+        header = ctk.CTkFrame(dialog, fg_color="transparent")
+        header.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
+        header.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            header, text="Chapters",
+            font=ctk.CTkFont(size=13, weight="bold"), anchor="w",
+        ).grid(row=0, column=0, sticky="w")
+
+        select_all_btn = ctk.CTkCheckBox(
+            header, text="Select All",
+            variable=self._chapter_select_all_var,
+            font=ctk.CTkFont(size=11), command=self._on_chapter_select_all,
+        )
+        select_all_btn.grid(row=0, column=1, padx=(8, 0))
+
+        scroll = ctk.CTkScrollableFrame(dialog)
+        scroll.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
+        scroll.grid_columnconfigure(0, weight=1)
+
+        for i, ch in enumerate(self._available_chapters):
+            var = self._chapter_vars[i]
+            time_range = format_chapter_range(ch["start_time"], ch["end_time"])
+            label = f"{i + 1}. {ch['title']} ({time_range})"
+            ctk.CTkCheckBox(
+                scroll, text=label, variable=var,
+                font=ctk.CTkFont(size=12),
+                command=self._update_chapter_summary,
+            ).grid(row=i, column=0, sticky="w", pady=1)
 
     def _on_chapter_select_all(self) -> None:
         select = self._chapter_select_all_var.get()
         for var in self._chapter_vars:
             var.set(select)
+        self._update_chapter_summary()
 
     def _get_selected_chapters(self) -> list[str] | None:
         """Return list of selected chapter titles, or None if all selected or picker not used."""
