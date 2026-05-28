@@ -10,7 +10,7 @@ alwaysApply: false
 
 1. **Specific exceptions where meaningful** — catch `json.JSONDecodeError`, `OSError`, `requests.RequestException`, `zipfile.BadZipFile`, `subprocess.TimeoutExpired`, etc.
 2. **Broad `except Exception`** — only for resilience in non-critical UI paths (DnD setup, clipboard, geometry restore, notifications, main-queue drain).
-3. **`contextlib.suppress(Exception)`** — for non-critical cleanup only (widget destroy, tray notify).
+3. **`contextlib.suppress(Exception)`** — for non-critical cleanup only (widget destroy, geometry save).
 
 ## Rules
 

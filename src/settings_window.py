@@ -77,11 +77,6 @@ class SettingsWindow(ctk.CTkToplevel):
         self._scale_label.configure(text=f"{int(value * 100)}%")
         self._state.save_settings(ui_scale=value)
 
-    def _on_concurrency_change(self, value: float) -> None:
-        n = max(1, min(5, round(value)))
-        self._concurrency_label.configure(text=str(n))
-        self._state.save_settings(max_concurrent_downloads=n)
-
     def _on_clipboard_toggle(self) -> None:
         enabled = self._clip_var.get()
         self._state.save_settings(clipboard_monitor=enabled)

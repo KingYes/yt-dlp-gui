@@ -10,7 +10,6 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 
 - Single URL or batch download (paste multiple URLs, one per line)
 - Playlist and channel detection with smart prompting for ambiguous links
-- Concurrent downloads (up to 5 simultaneous)
 - Drag-and-drop URLs into the window
 - Clipboard monitoring — automatically adds copied URLs
 - Download queue with reordering, removal, and persistence across sessions
@@ -64,14 +63,12 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 ### Settings
 
 - **Appearance**: theme (System / Dark / Light), UI scale (80%–150%), language selection (English, Hebrew — add more via JSON files)
-- **Download defaults**: speed limit, simultaneous downloads (1–5), embed thumbnail, embed metadata, subtitle languages, clipboard monitoring
+- **Download defaults**: speed limit, embed thumbnail, embed metadata, subtitle languages, clipboard monitoring
 - **Network**: proxy support, browser cookies (Chrome, Firefox, Edge, Safari, Brave, Opera, Vivaldi), Netscape cookie file
 - **Advanced**: portable mode (config stored next to executable)
 
 ### System Integration
 
-- System tray icon — minimize to tray instead of closing; downloads continue in the background
-- Tray notifications for download events
 - OS-level notifications on download completion (macOS, Windows, Linux)
 - Auto-update check against GitHub releases with in-app banner
 - First-run setup wizard that downloads and installs FFmpeg automatically
@@ -138,20 +135,22 @@ pytest
 ## Project Structure
 
 ```
-main.py               Entry point
-app.py                Main application window and UI
-download_manager.py   yt-dlp wrapper with progress hooks, retry, and concurrent downloads
-i18n.py               Lightweight JSON-based internationalization module
-state.py              Persistent JSON state (stats, history, queue, settings)
-settings_window.py    Settings dialog UI
-setup_wizard.py       First-run FFmpeg download wizard
-tray.py               System tray icon (pystray)
-updater.py            Auto-update checker against GitHub releases
-utils.py              URL validation, format helpers, OS utilities
-locales/              Translation JSON files (en.json, he.json, ...)
-tests/                Unit tests (pytest)
-pyproject.toml        Ruff, mypy, and pytest configuration
-requirements.txt      Runtime dependencies
+main.py                   Entry point
+src/
+  app.py                  Main application window and UI coordinator
+  download_manager.py     yt-dlp wrapper with progress hooks and retry logic
+  download_handler.py     Download orchestration bridging UI and manager
+  i18n.py                 Lightweight JSON-based internationalization module
+  state.py                Persistent JSON state (stats, history, queue, settings)
+  settings_window.py      Settings dialog UI
+  setup_wizard.py         First-run FFmpeg download wizard
+  updater.py              Auto-update checker against GitHub releases
+  utils.py                URL validation, format helpers, OS utilities
+  widgets/                Extracted UI components (URL frame, format frame, etc.)
+locales/                  Translation JSON files (en.json, he.json, ...)
+tests/                    Unit tests (pytest)
+pyproject.toml            Ruff, mypy, and pytest configuration
+requirements.txt          Runtime dependencies
 ```
 
 ## License

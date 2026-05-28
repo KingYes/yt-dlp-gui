@@ -31,5 +31,5 @@ alwaysApply: false
 
 ## Optional Dependencies
 
-- Guard with `_HAS_DND` / `_HAS_PYSTRAY` booleans from `try/except ImportError`.
+- Guard with `_HAS_DND` boolean from `try/except ImportError`.
 - Features silently skip when the optional dep is unavailable.

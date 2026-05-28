@@ -5,7 +5,6 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -75,11 +74,14 @@ class _FileProgressPoller:
             self._stop.wait(self._interval)
 
 
+_PROGRESS_THROTTLE_INTERVAL = 0.05
+
+
 class DownloadManager:
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
         self._cancel_event = threading.Event()
-        self._executor: ThreadPoolExecutor | None = None
+        self._last_progress_time: float = 0.0
 
     @property
     def is_busy(self) -> bool:
@@ -397,123 +399,6 @@ class DownloadManager:
         self._thread = threading.Thread(target=_worker, daemon=True)
         self._thread.start()
 
-    def download_batch_concurrent(
-        self,
-        urls: list[str],
-        format_key: str,
-        output_dir: str,
-        max_workers: int,
-        progress_callback: Callable[[int, dict], None],
-        item_done_callback: Callable[[int, int, str | None], None],
-        done_callback: Callable[[str | None], None],
-        split_chapters: bool = False,
-        playlist: bool = False,
-        settings: dict[str, Any] | None = None,
-        section_start: str = "",
-        section_end: str = "",
-        format_string: str = "",
-        selected_chapters: list[str] | None = None,
-        selected_subtitle_langs: list[str] | None = None,
-    ) -> None:
-        """Download multiple URLs concurrently using a thread pool.
-
-        progress_callback(item_index, data) is called with 0-based item index.
-        item_done_callback(index_1based, total, error) is called after each URL.
-        done_callback(error) is called when all URLs finish or on cancellation.
-        """
-        if self.is_busy:
-            done_callback("A download is already in progress.")
-            return
-
-        self._cancel_event.clear()
-        settings = settings or {}
-        base_opts = self._build_base_opts(
-            format_key, output_dir,
-            split_chapters=split_chapters, playlist=playlist,
-            settings=settings,
-            section_start=section_start, section_end=section_end,
-            format_string=format_string,
-            selected_chapters=selected_chapters,
-            selected_subtitle_langs=selected_subtitle_langs,
-        )
-        total = len(urls)
-        do_burn = self._should_burn_subs(settings)
-
-        def _coordinator() -> None:
-            executor = ThreadPoolExecutor(max_workers=min(max_workers, total))
-            self._executor = executor
-            futures: list[tuple[int, Future[str | None]]] = []
-
-            for idx, url in enumerate(urls):
-                if self._cancel_event.is_set():
-                    break
-                future = executor.submit(
-                    self._download_one, idx, url, base_opts, progress_callback,
-                    settings=settings, burn_subs=do_burn,
-                )
-                futures.append((idx, future))
-
-            cancelled = False
-            for idx, future in futures:
-                try:
-                    error = future.result()
-                except Exception as exc:
-                    error = str(exc)
-
-                if self._cancel_event.is_set() and not cancelled:
-                    cancelled = True
-                    executor.shutdown(wait=False, cancel_futures=True)
-
-                item_done_callback(idx + 1, total, error)
-
-            self._executor = None
-            if cancelled or self._cancel_event.is_set():
-                done_callback("Download cancelled.")
-            else:
-                done_callback(None)
-
-        self._thread = threading.Thread(target=_coordinator, daemon=True)
-        self._thread.start()
-
-    def _download_one(
-        self,
-        idx: int,
-        url: str,
-        base_opts: dict,
-        progress_callback: Callable[[int, dict], None],
-        settings: dict[str, Any] | None = None,
-        burn_subs: bool = False,
-    ) -> str | None:
-        """Download a single URL with retries. Returns error string or None."""
-        finished_files: list[str] = []
-        item_opts = dict(base_opts)
-        item_opts["progress_hooks"] = [
-            lambda d, _idx=idx: self._on_progress(
-                d, lambda p: progress_callback(_idx, p),
-                finished_files=finished_files if burn_subs else None,
-            )
-        ]
-
-        last_exc: Exception | None = None
-        for attempt in range(_MAX_RETRIES + 1):
-            if self._cancel_event.is_set():
-                return "Download cancelled."
-            finished_files.clear()
-            try:
-                with yt_dlp.YoutubeDL(item_opts) as ydl:
-                    ydl.download([url])
-                if self._cancel_event.is_set():
-                    return "Download cancelled."
-                if burn_subs and finished_files and settings:
-                    for fpath in set(finished_files):
-                        self._run_burn(fpath, settings)
-                return None
-            except Exception as exc:
-                last_exc = exc
-                if attempt < _MAX_RETRIES:
-                    time.sleep(2)
-        return str(last_exc) if last_exc else "Unknown error"
-
     def extract_info(
         self,
         url: str,
@@ -543,8 +428,6 @@ class DownloadManager:
 
     def cancel(self) -> None:
         self._cancel_event.set()
-        if self._executor is not None:
-            self._executor.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
     def _should_burn_subs(settings: dict[str, Any] | None) -> bool:
@@ -577,10 +460,20 @@ class DownloadManager:
         if self._cancel_event.is_set():
             raise yt_dlp.utils.DownloadError("Cancelled by user")
 
-        info = data.get("info_dict") or {}
+        status = data.get("status", "")
         filename = data.get("filename", "")
+
+        if status == "finished" and filename and finished_files is not None:
+            finished_files.append(filename)
+
+        now = time.monotonic()
+        if status == "downloading" and (now - self._last_progress_time) < _PROGRESS_THROTTLE_INTERVAL:
+            return
+        self._last_progress_time = now
+
+        info = data.get("info_dict") or {}
         progress = {
-            "status": data.get("status", ""),
+            "status": status,
             "downloaded_bytes": data.get("downloaded_bytes", 0),
             "total_bytes": data.get("total_bytes") or data.get("total_bytes_estimate") or 0,
             "speed": data.get("speed", 0),
@@ -590,9 +483,6 @@ class DownloadManager:
             "duration": info.get("duration"),
         }
         callback(progress)
-
-        if data.get("status") == "finished" and filename and finished_files is not None:
-            finished_files.append(filename)
 
     @staticmethod
     def _on_postprocessor(

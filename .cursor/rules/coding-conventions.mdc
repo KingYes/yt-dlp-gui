@@ -17,7 +17,7 @@ alwaysApply: true
 - **Order**: stdlib → third-party → local modules (enforced by ruff isort).
 - **Optional imports** in `try/except ImportError` blocks at the end of the import section, setting a `_HAS_<NAME>` boolean.
 - **Alias**: `import customtkinter as ctk`.
-- **Absolute imports only** — no relative imports.
+- **Relative imports within the `src/` package** (e.g. `from .utils import ...`). Absolute imports for stdlib and third-party.
 
 ## Naming
 

@@ -15,6 +15,6 @@ yt-dlp GUI is a cross-platform desktop application built with Python 3.12+ and C
 ## Key Rules
 
 - When adding or changing a user-facing feature, update the Features section in `README.md`. See `.cursor/rules/update-readme-on-feature.mdc`.
-- Keep the version in `updater.py` (`APP_VERSION`) and `pyproject.toml` (`version`) in sync. The `bump.yml` workflow handles this automatically for releases.
+- Keep the version in `src/updater.py` (`APP_VERSION`) and `pyproject.toml` (`version`) in sync. The `bump.yml` workflow handles this automatically for releases.
 - All downloads run in background threads — never block the main (UI) thread.
-- Gracefully degrade when optional dependencies are missing (`tkinterdnd2`, `pystray`).
+- Gracefully degrade when optional dependencies are missing (`tkinterdnd2`).

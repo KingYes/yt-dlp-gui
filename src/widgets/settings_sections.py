@@ -116,30 +116,6 @@ def build_download_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row:
     win._speed_entry.bind("<Return>", lambda _: win._save_text_field("speed_limit", win._speed_entry))
     row += 1
 
-    ctk.CTkLabel(parent, text=t("settings.simultaneous"), font=ctk.CTkFont(size=13)).grid(
-        row=row, column=0, sticky=s, pady=(0, 4)
-    )
-    row += 1
-
-    concurrency_frame = ctk.CTkFrame(parent, fg_color="transparent")
-    concurrency_frame.grid(row=row, column=0, sticky="ew", pady=(0, 12))
-    concurrency_frame.grid_columnconfigure(0, weight=1)
-
-    current_concurrency = int(win._settings.get("max_concurrent_downloads", 3))
-    win._concurrency_var = ctk.IntVar(value=current_concurrency)
-    win._concurrency_label = ctk.CTkLabel(
-        concurrency_frame, text=str(current_concurrency), font=ctk.CTkFont(size=12),
-        width=30,
-    )
-    win._concurrency_label.grid(row=0, column=1, padx=(8, 0))
-
-    concurrency_slider = ctk.CTkSlider(
-        concurrency_frame, from_=1, to=5, number_of_steps=4,
-        variable=win._concurrency_var, command=win._on_concurrency_change,
-    )
-    concurrency_slider.grid(row=0, column=0, sticky="ew")
-    row += 1
-
     win._embed_thumb_var = ctk.BooleanVar(value=win._settings.get("embed_thumbnail", False))
     ctk.CTkCheckBox(
         parent, text=t("settings.embed_thumbnail"),
