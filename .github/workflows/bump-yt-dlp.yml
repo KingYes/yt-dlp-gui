@@ -1,0 +1,64 @@
+name: Bump yt-dlp
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check for newer yt-dlp
+        id: check
+        run: |
+          latest=$(pip index versions yt-dlp 2>/dev/null | head -1 | sed 's/.*(\(.*\))/\1/')
+          current=$(grep '^yt-dlp' requirements.txt | sed 's/.*>=\(.*\)/\1/')
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          if [ "$latest" != "$current" ]; then
+            echo "needs_bump=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_bump=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update requirements.txt
+        if: steps.check.outputs.needs_bump == 'true'
+        run: |
+          sed -i "s/^yt-dlp>=.*/yt-dlp>=${{ steps.check.outputs.latest }}/" requirements.txt
+
+      - name: Bump patch version in pyproject.toml
+        if: steps.check.outputs.needs_bump == 'true'
+        run: |
+          python - <<'PYEOF'
+          import re
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text()
+          match = re.search(r'version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', text)
+          major, minor, patch = match.groups()
+          new_version = f"{major}.{minor}.{int(patch) + 1}"
+          text = text.replace(match.group(0), f'version = "{new_version}"')
+          path.write_text(text)
+          print(f"Bumped version to {new_version}")
+          PYEOF
+
+      - name: Commit and push
+        if: steps.check.outputs.needs_bump == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements.txt pyproject.toml
+          git commit -m "bump yt-dlp to ${{ steps.check.outputs.latest }}"
+          git push

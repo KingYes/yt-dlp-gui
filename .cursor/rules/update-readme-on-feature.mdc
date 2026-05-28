@@ -1,0 +1,16 @@
+---
+description: Keep README.md features section in sync with the codebase
+alwaysApply: true
+---
+
+# Update README on Feature Changes
+
+When you add a new user-facing feature or significantly change an existing one, update the **Features** section in `README.md` to reflect the change.
+
+## Rules
+
+- Add new features under the appropriate category heading (Download, Format & Quality, Subtitles, Chapters, Sections, Preview, Queue, Progress, Settings, System Integration, State Persistence).
+- If no existing category fits, create a new `###` heading in a logical position.
+- Keep descriptions concise and factual — describe what the feature does, not why it's great.
+- Remove or update entries for features that have been removed or changed.
+- Do not rewrite unrelated parts of the README when updating features.
