@@ -1,0 +1,31 @@
+---
+description: Pytest testing patterns and test organization
+globs: "tests/**/*.py"
+alwaysApply: false
+---
+
+# Testing Conventions
+
+## Organization
+
+- One test file per source module: `test_<module>.py`.
+- Group related tests in classes: `TestIsValidUrl`, `TestDownloadOne`.
+- Use `# ────` section dividers between test groups.
+
+## Patterns
+
+- **`@pytest.mark.parametrize`** for input variations (URL formats, formatting edge cases).
+- **`@pytest.fixture(autouse=True)`** for shared isolation (e.g., monkeypatch `_STATE_DIR` to `tmp_path`).
+- **`unittest.mock.patch` / `MagicMock`** to mock external deps (yt-dlp, platform, pystray). No real network calls.
+- **`tmp_path`** fixture for file system tests.
+- **Helper factories** (`_build()`, `_make_entry()`) for complex test data — keep them as module-level `_`-prefixed functions.
+
+## Thread Tests
+
+- Use `threading.Event` and `threading.Barrier` for synchronization.
+- **Never use `time.sleep()`** — use `_wait_for_thread(dm)` or `thread.join(timeout)`.
+
+## Scope
+
+- Test **business logic and pure functions** thoroughly.
+- **No UI/widget tests** — CustomTkinter is not tested; mock I/O boundaries instead.

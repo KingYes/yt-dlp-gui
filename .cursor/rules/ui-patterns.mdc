@@ -1,0 +1,35 @@
+---
+description: CustomTkinter UI layout and widget conventions
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# UI Patterns
+
+## Layout
+
+- **Grid-based** layout throughout: `grid_columnconfigure(0, weight=1)` for stretch.
+- **Section builders** follow `_build_<section>_frame(self, row: int)` or `_build_<section>_section(parent, start_row) -> int`.
+- Main scroll container: `CTkScrollableFrame` with transparent background.
+- Section frames: `CTkFrame` with `fg_color="transparent"` for row groupings.
+
+## Internationalization & RTL
+
+- All user-visible text uses `t("key")` — never hardcode strings in widgets.
+- RTL support: use `_anchor_start()`, `_sticky_start()` / `_sticky_end()`, `_c()` for column mirroring.
+
+## Widgets
+
+- Store widget references as `self._<name>` private attributes.
+- Use `CTkFont(size=..., weight="bold")` for consistent typography.
+- Bind widget values with `ctk.StringVar`, `ctk.BooleanVar`, `ctk.DoubleVar`.
+
+## Dialogs
+
+- **Modal**: `CTkToplevel` with `transient(parent)` + `grab_set()`.
+- **Non-modal** pickers (subtitle, chapter): skip `grab_set()`.
+
+## Optional Dependencies
+
+- Guard with `_HAS_DND` / `_HAS_PYSTRAY` booleans from `try/except ImportError`.
+- Features silently skip when the optional dep is unavailable.

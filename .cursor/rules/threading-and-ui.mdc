@@ -1,0 +1,22 @@
+---
+description: Threading model and main-thread safety conventions
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Threading & UI Safety
+
+All I/O, downloads, and network calls **must** run in background daemon threads — never block the main (UI) thread.
+
+## Main-Thread Dispatcher
+
+Use `queue.Queue[Callable[[], None]]` + `self.after(16, self._drain_main_queue)` to marshal callbacks from worker threads to the main thread. Background threads call `_call_on_main(func)` to schedule work on the UI thread.
+
+## Rules
+
+- **Daemon threads only** — set `daemon=True` on all background `threading.Thread` instances.
+- **`DownloadManager` must never import or reference UI widgets.** Communicate results via callbacks (`progress_callback`, `item_done_callback`, `done_callback`).
+- **Cancellation** — use `threading.Event` (`_cancel_event`). Never kill threads.
+- **Tray callbacks** must never call Tkinter directly (causes fatal macOS crashes). Set `threading.Event` flags and poll them from the main thread via `self.after(250, self._poll_tray)`.
+- **Concurrent downloads** — use a coordinator thread + `ThreadPoolExecutor`. Cap `max_workers` from settings.
+- **`self.after()` timers** for periodic main-thread work (clipboard polling, queue processing, tray events). Keep intervals consistent with existing values (16 ms queue drain, 250 ms tray poll, 1000 ms clipboard).

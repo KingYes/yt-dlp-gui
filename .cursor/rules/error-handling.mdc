@@ -1,0 +1,21 @@
+---
+description: Error handling strategy and exception patterns
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Error Handling
+
+## Strategy Tiers
+
+1. **Specific exceptions where meaningful** — catch `json.JSONDecodeError`, `OSError`, `requests.RequestException`, `zipfile.BadZipFile`, `subprocess.TimeoutExpired`, etc.
+2. **Broad `except Exception`** — only for resilience in non-critical UI paths (DnD setup, clipboard, geometry restore, notifications, main-queue drain).
+3. **`contextlib.suppress(Exception)`** — for non-critical cleanup only (widget destroy, tray notify).
+
+## Rules
+
+- **Download errors propagate as `str | None` via callbacks** (`done_callback(str(exc))`). Never raise exceptions into the UI thread.
+- **Optional feature guards** — check `if not _HAS_X: return` before attempting optional functionality.
+- **State load failures** — fall back to `_DEFAULT_STATE` silently on `(json.JSONDecodeError, OSError)`.
+- **No custom exception hierarchy** — errors are strings shown in the UI log panel.
+- **Never silently swallow exceptions in business logic** — broad catches are reserved for UI resilience, not download or data processing code.

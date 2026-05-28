@@ -1,0 +1,33 @@
+---
+description: Python coding style, imports, and naming conventions
+alwaysApply: true
+---
+
+# Coding Conventions
+
+## Python Version & Typing
+
+- Target **Python 3.12+**.
+- **Type hints on all function signatures** (enforced by mypy `disallow_untyped_defs`).
+- Use modern syntax: `list[dict]`, `str | None`, `Callable[[], None]`. Do **not** use `Optional`, `typing.List`, or `typing.Dict`.
+- Use `from collections.abc import Callable` (not `typing.Callable`).
+
+## Imports
+
+- **Order**: stdlib → third-party → local modules (enforced by ruff isort).
+- **Optional imports** in `try/except ImportError` blocks at the end of the import section, setting a `_HAS_<NAME>` boolean.
+- **Alias**: `import customtkinter as ctk`.
+- **Absolute imports only** — no relative imports.
+
+## Naming
+
+- **Private helpers**: module-level functions with `_` prefix.
+- **Module-level constants**: `_` prefix, `SCREAMING_SNAKE_CASE` (e.g., `_DEFAULT_STATE`, `_MAX_RETRIES`).
+- **UI builders**: `_build_<section>_frame`, `_on_<event>` for handlers.
+- **Section dividers**: `# ----` style comments for navigation in large files.
+
+## Style
+
+- **Line length**: 120 characters (ruff config).
+- **No star imports**.
+- Use `# type: ignore[<code>]` with a specific mypy error code when suppressing type errors on third-party imports.
