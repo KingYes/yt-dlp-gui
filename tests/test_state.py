@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -7,7 +8,7 @@ from state import AppState
 
 
 @pytest.fixture(autouse=True)
-def _isolate_state(tmp_path, monkeypatch):
+def _isolate_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Redirect _STATE_DIR / _STATE_FILE to a temp directory for every test.
 
     Also reset the mutable default containers in _DEFAULT_STATE so that
@@ -30,7 +31,7 @@ class TestLoadDefaults:
         assert s.history == []
         assert s.recent_folders == []
 
-    def test_load_empty_file(self, tmp_path) -> None:
+    def test_load_empty_file(self, tmp_path: Path) -> None:
         state_file = state_module._STATE_FILE
         state_file.write_text("", encoding="utf-8")
         s = AppState()

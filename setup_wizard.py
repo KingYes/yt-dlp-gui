@@ -78,10 +78,10 @@ def _extract_btbn_archive(archive_path: Path, dest_dir: Path) -> None:
 
     elif name.endswith(".tar.xz") or name.endswith(".tar.gz"):
         with tarfile.open(archive_path, "r:*") as tf:
-            for member in tf.getmembers():
-                basename = Path(member.name).name.lower()
-                if basename in ("ffmpeg", "ffprobe") and member.isfile():
-                    reader = tf.extractfile(member)
+            for tar_member in tf.getmembers():
+                basename = Path(tar_member.name).name.lower()
+                if basename in ("ffmpeg", "ffprobe") and tar_member.isfile():
+                    reader = tf.extractfile(tar_member)
                     if reader:
                         target = dest_dir / basename
                         with open(target, "wb") as dst:

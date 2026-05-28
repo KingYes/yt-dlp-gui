@@ -101,7 +101,8 @@ class AppState:
 
     @property
     def stats(self) -> dict[str, int]:
-        return self._data["stats"]
+        result: dict[str, int] = self._data["stats"]
+        return result
 
     def record_download(
         self,
@@ -143,7 +144,8 @@ class AppState:
 
     @property
     def last_input(self) -> dict[str, Any]:
-        return self._data["last_input"]
+        result: dict[str, Any] = self._data["last_input"]
+        return result
 
     def save_last_input(
         self,
@@ -180,7 +182,8 @@ class AppState:
 
     @property
     def recent_folders(self) -> list[str]:
-        return self._data["recent_folders"]
+        result: list[str] = self._data["recent_folders"]
+        return result
 
     def add_recent_folder(self, folder: str) -> None:
         folders = self._data["recent_folders"]
@@ -194,7 +197,8 @@ class AppState:
 
     @property
     def window_geometry(self) -> str:
-        return self._data.get("window_geometry", "")
+        result: str = self._data.get("window_geometry", "")
+        return result
 
     @window_geometry.setter
     def window_geometry(self, value: str) -> None:
@@ -204,13 +208,15 @@ class AppState:
 
     @property
     def history(self) -> list[dict[str, Any]]:
-        return self._data["history"]
+        result: list[dict[str, Any]] = self._data["history"]
+        return result
 
     # --------------------------------------------------------- Download Queue
 
     @property
     def download_queue(self) -> list[dict[str, Any]]:
-        return self._data["download_queue"]
+        result: list[dict[str, Any]] = self._data["download_queue"]
+        return result
 
     def save_queue(self, entries: list[dict[str, Any]]) -> None:
         self._data["download_queue"] = entries
@@ -224,7 +230,8 @@ class AppState:
 
     @property
     def settings(self) -> dict[str, Any]:
-        return self._data["settings"]
+        result: dict[str, Any] = self._data["settings"]
+        return result
 
     def save_settings(self, **kwargs: Any) -> None:
         for key, value in kwargs.items():

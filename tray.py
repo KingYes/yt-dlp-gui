@@ -20,6 +20,7 @@ def _create_icon_image(size: int = 64) -> Image.Image:
     """Generate a simple 'YT' icon with Pillow."""
     img = Image.new("RGBA", (size, size), (220, 53, 69, 255))
     draw = ImageDraw.Draw(img)
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
     try:
         font = ImageFont.truetype("arial.ttf", size // 2)
     except OSError:

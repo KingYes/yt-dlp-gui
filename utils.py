@@ -323,5 +323,5 @@ def _win_toast(title: str, message: str) -> None:
     )
     subprocess.Popen(
         ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps],
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0,
     )

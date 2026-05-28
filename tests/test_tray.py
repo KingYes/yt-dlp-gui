@@ -15,10 +15,12 @@ class TestCreateIconImage:
 
 
 class TestTrayManagerAvailability:
+    @patch("tray._HAS_PYSTRAY", True)
     def test_available_when_pystray_imported(self) -> None:
         tm = TrayManager(on_show=lambda: None, on_quit=lambda: None)
         assert tm.available is True
 
+    @patch("tray._HAS_PYSTRAY", True)
     def test_start_creates_icon(self) -> None:
         with patch("tray.pystray") as mock_pystray:
             mock_icon = MagicMock()
@@ -86,6 +88,7 @@ class TestTrayManagerCallbacks:
         tm._quit_action(MagicMock(), MagicMock())
         assert called == ["quit"]
 
+    @patch("tray._HAS_PYSTRAY", True)
     def test_double_start_is_noop(self) -> None:
         with patch("tray.pystray") as mock_pystray:
             mock_icon = MagicMock()

@@ -20,7 +20,7 @@ from utils import check_ffmpeg, get_bin_dir, get_ffmpeg_location
 class TestGetDownloadUrls:
     @patch("setup_wizard.platform.system", return_value="Windows")
     @patch("setup_wizard.platform.machine", return_value="AMD64")
-    def test_windows_amd64(self, _m, _s) -> None:
+    def test_windows_amd64(self, _m: object, _s: object) -> None:
         urls = get_download_urls()
         assert len(urls) == 1
         assert "win64" in urls[0]
@@ -28,7 +28,7 @@ class TestGetDownloadUrls:
 
     @patch("setup_wizard.platform.system", return_value="Linux")
     @patch("setup_wizard.platform.machine", return_value="x86_64")
-    def test_linux_x86_64(self, _m, _s) -> None:
+    def test_linux_x86_64(self, _m: object, _s: object) -> None:
         urls = get_download_urls()
         assert len(urls) == 1
         assert "linux64" in urls[0]
@@ -36,14 +36,14 @@ class TestGetDownloadUrls:
 
     @patch("setup_wizard.platform.system", return_value="Linux")
     @patch("setup_wizard.platform.machine", return_value="aarch64")
-    def test_linux_arm64(self, _m, _s) -> None:
+    def test_linux_arm64(self, _m: object, _s: object) -> None:
         urls = get_download_urls()
         assert len(urls) == 1
         assert "linuxarm64" in urls[0]
 
     @patch("setup_wizard.platform.system", return_value="Darwin")
     @patch("setup_wizard.platform.machine", return_value="arm64")
-    def test_macos_arm64(self, _m, _s) -> None:
+    def test_macos_arm64(self, _m: object, _s: object) -> None:
         urls = get_download_urls()
         assert len(urls) == 2
         assert "evermeet" in urls[0]
@@ -51,13 +51,13 @@ class TestGetDownloadUrls:
 
     @patch("setup_wizard.platform.system", return_value="Darwin")
     @patch("setup_wizard.platform.machine", return_value="x86_64")
-    def test_macos_x86(self, _m, _s) -> None:
+    def test_macos_x86(self, _m: object, _s: object) -> None:
         urls = get_download_urls()
         assert len(urls) == 2
 
     @patch("setup_wizard.platform.system", return_value="FreeBSD")
     @patch("setup_wizard.platform.machine", return_value="amd64")
-    def test_unsupported_platform(self, _m, _s) -> None:
+    def test_unsupported_platform(self, _m: object, _s: object) -> None:
         urls = get_download_urls()
         assert urls == []
 
