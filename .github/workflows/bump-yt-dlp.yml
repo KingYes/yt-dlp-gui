@@ -11,6 +11,9 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
+    outputs:
+      needs_bump: ${{ steps.check.outputs.needs_bump }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +40,8 @@ jobs:
         run: |
           sed -i "s/^yt-dlp>=.*/yt-dlp>=${{ steps.check.outputs.latest }}/" requirements.txt
 
-      - name: Bump patch version in pyproject.toml
+      - name: Bump patch version
+        id: version
         if: steps.check.outputs.needs_bump == 'true'
         run: |
           python - <<'PYEOF'
@@ -52,13 +56,34 @@ jobs:
           text = text.replace(match.group(0), f'version = "{new_version}"')
           path.write_text(text)
           print(f"Bumped version to {new_version}")
+
+          import subprocess
+          subprocess.run(
+              ["bash", "-c", f'echo "version={new_version}" >> "$GITHUB_OUTPUT"'],
+              check=True,
+          )
           PYEOF
 
-      - name: Commit and push
+      - name: Update updater.py
+        if: steps.check.outputs.needs_bump == 'true'
+        run: |
+          sed -i "s/^APP_VERSION = .*/APP_VERSION = \"${{ steps.version.outputs.version }}\"/" updater.py
+
+      - name: Commit, tag, and push
         if: steps.check.outputs.needs_bump == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add requirements.txt pyproject.toml
+          git add requirements.txt pyproject.toml updater.py
           git commit -m "bump yt-dlp to ${{ steps.check.outputs.latest }}"
-          git push
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin HEAD "v${{ steps.version.outputs.version }}"
+
+  release:
+    needs: bump
+    if: needs.bump.outputs.needs_bump == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      version: v${{ needs.bump.outputs.version }}
+    permissions:
+      contents: write
