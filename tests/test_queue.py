@@ -144,7 +144,7 @@ class TestQueueReordering:
         assert queue[1]["urls"] == ["https://a"]
 
     def test_move_up_boundary(self) -> None:
-        queue = [_make_entry("https://a"), _make_entry("https://b")]
+        _make_entry("https://a"), _make_entry("https://b")
         index, direction = 0, -1
         new_index = index + direction
         assert new_index < 0  # should be rejected by the app

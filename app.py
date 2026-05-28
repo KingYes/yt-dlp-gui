@@ -1,3 +1,4 @@
+import contextlib
 import os
 import webbrowser
 from pathlib import Path
@@ -6,8 +7,8 @@ from tkinter import filedialog
 import customtkinter as ctk
 
 from download_manager import (
-    DownloadManager,
     FORMAT_PRESETS,
+    DownloadManager,
     build_format_string,
     parse_chapters,
     parse_formats,
@@ -35,7 +36,7 @@ from utils import (
 )
 
 try:
-    from tkinterdnd2 import DND_TEXT, TkinterDnD  # type: ignore[import-untyped]
+    from tkinterdnd2 import DND_TEXT  # type: ignore[import-untyped]
 
     _HAS_DND = True
 except ImportError:
@@ -1062,7 +1063,7 @@ class App(ctk.CTk):
 
     def _auto_switch_to_multiple(self, text: str) -> None:
         """If text contains multiple lines, switch to Multiple mode and populate."""
-        lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+        lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
         if len(lines) > 1 and self._input_mode == "single":
             self._url_entry.delete(0, "end")
             self._switch_mode("multiple")
@@ -1552,10 +1553,8 @@ class App(ctk.CTk):
     def _restore_geometry(self) -> None:
         geo = self._state.window_geometry
         if geo:
-            try:
+            with contextlib.suppress(Exception):
                 self.geometry(geo)
-            except Exception:
-                pass
 
     def _on_close(self) -> None:
         if self._manager.is_busy and self._tray.available:
@@ -1832,7 +1831,7 @@ class App(ctk.CTk):
         if download_section:
             s = section_start or "0:00"
             e = section_end or "end"
-            section_info = f", section {s}–{e}"
+            section_info = f", section {s}-{e}"
         format_display = custom_format_str if self._custom_format_enabled else format_key
 
         pp_parts: list[str] = []

@@ -8,8 +8,8 @@ import tarfile
 import tempfile
 import threading
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import customtkinter as ctk
 import requests
@@ -249,11 +249,11 @@ class SetupWizard(ctk.CTkToplevel):
             self.after(0, self._on_success)
 
         except requests.RequestException as exc:
-            self.after(0, lambda: self._on_error(f"Download failed: {exc}"))
+            self.after(0, lambda e=exc: self._on_error(f"Download failed: {e}"))
         except (zipfile.BadZipFile, tarfile.TarError) as exc:
-            self.after(0, lambda: self._on_error(f"Extraction failed: {exc}"))
+            self.after(0, lambda e=exc: self._on_error(f"Extraction failed: {e}"))
         except OSError as exc:
-            self.after(0, lambda: self._on_error(f"File system error: {exc}"))
+            self.after(0, lambda e=exc: self._on_error(f"File system error: {e}"))
 
     def _suffix_for(self, url: str) -> str:
         if ".tar.xz" in url:
