@@ -34,14 +34,14 @@ class TestTrayManagerAvailability:
             mock_pystray.Icon.assert_called_once()
             assert tm._icon is mock_icon
 
-    def test_stop_calls_icon_stop(self) -> None:
+    def test_stop_clears_icon_reference(self) -> None:
         tm = TrayManager(on_show=lambda: None, on_quit=lambda: None)
         mock_icon = MagicMock()
         tm._icon = mock_icon
 
         tm.stop()
-        mock_icon.stop.assert_called_once()
         assert tm._icon is None
+        assert tm._thread is None
 
     def test_stop_when_no_icon(self) -> None:
         tm = TrayManager(on_show=lambda: None, on_quit=lambda: None)
@@ -76,17 +76,29 @@ class TestTrayManagerNotify:
 
 
 class TestTrayManagerCallbacks:
-    def test_show_action_calls_on_show(self) -> None:
-        called = []
+    def test_show_action_sets_event_and_poll_calls_on_show(self) -> None:
+        called: list[str] = []
         tm = TrayManager(on_show=lambda: called.append("show"), on_quit=lambda: None)
         tm._show_action(MagicMock(), MagicMock())
+        assert called == []
+        tm.poll_events()
         assert called == ["show"]
 
-    def test_quit_action_calls_on_quit(self) -> None:
-        called = []
+    def test_quit_action_sets_event_and_poll_calls_on_quit(self) -> None:
+        called: list[str] = []
         tm = TrayManager(on_show=lambda: None, on_quit=lambda: called.append("quit"))
         tm._quit_action(MagicMock(), MagicMock())
+        assert called == []
+        tm.poll_events()
         assert called == ["quit"]
+
+    def test_poll_events_clears_flags(self) -> None:
+        called: list[str] = []
+        tm = TrayManager(on_show=lambda: called.append("show"), on_quit=lambda: None)
+        tm._show_action(MagicMock(), MagicMock())
+        tm.poll_events()
+        tm.poll_events()
+        assert called == ["show"]
 
     @patch("tray._HAS_PYSTRAY", True)
     def test_double_start_is_noop(self) -> None:

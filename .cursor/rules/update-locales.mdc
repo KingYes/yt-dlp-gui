@@ -1,0 +1,18 @@
+---
+description: Keep locale JSON files in sync when UI strings change
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Keep Locale Files in Sync
+
+When you add, change, or remove any user-visible string in a `.py` file, update the locale JSON files in `locales/`.
+
+## Rules
+
+- **Never hardcode** user-visible text. Always use `t("key")` from `i18n.py` for widget `text=`, `placeholder_text=`, `title=`, `_log()` calls, and notification strings.
+- **Adding a string**: add the key and English value to `locales/en.json`, then add the same key to every other locale file with the value prefixed by `[TODO] ` (e.g. `"[TODO] Download"`).
+- **Changing a string**: update the value in `locales/en.json` and prefix the corresponding value in other locale files with `[TODO] ` so translators know it needs updating.
+- **Removing a string**: delete the key from **all** locale files.
+- Use flat dot-notation keys (e.g. `"settings.theme"`, `"log.item_done"`).
+- Use `{placeholder}` syntax for dynamic values: `t("log.error", error=msg)`.

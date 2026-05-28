@@ -1,6 +1,8 @@
 import contextlib
 import os
+import queue
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog
 
@@ -14,6 +16,7 @@ from download_manager import (
     parse_formats,
     parse_subtitles,
 )
+from i18n import is_rtl, load_language, t
 from settings_window import SettingsWindow
 from setup_wizard import SetupWizard
 from state import AppState
@@ -43,11 +46,42 @@ except ImportError:
     _HAS_DND = False
 
 
+def _anchor_start() -> str:
+    """Return 'e' for RTL languages, 'w' for LTR."""
+    return "e" if is_rtl() else "w"
+
+
+def _sticky_start() -> str:
+    """Return 'e' for RTL languages, 'w' for LTR."""
+    return "e" if is_rtl() else "w"
+
+
+def _sticky_end() -> str:
+    """Return 'w' for RTL languages, 'e' for LTR."""
+    return "w" if is_rtl() else "e"
+
+
+def _pad_start(outer: int = 0, inner: int = 0) -> tuple[int, int]:
+    """Return (left, right) padding — `outer` on the start side, `inner` on end."""
+    return (inner, outer) if is_rtl() else (outer, inner)
+
+
+def _pad_end(outer: int = 0, inner: int = 0) -> tuple[int, int]:
+    """Return (left, right) padding — `outer` on the end side, `inner` on start."""
+    return (outer, inner) if is_rtl() else (inner, outer)
+
+
+def _c(col: int, max_col: int) -> int:
+    """Mirror a grid column index for RTL layouts."""
+    return max_col - col if is_rtl() else col
+
+
 class App(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
 
-        self.title("yt-dlp GUI")
+        self._main_queue: queue.Queue[Callable[[], None]] = queue.Queue()
+
         self.geometry("780x640")
         self.minsize(640, 480)
 
@@ -56,6 +90,8 @@ class App(ctk.CTk):
         self._state = AppState()
 
         settings = self._state.settings
+        load_language(settings.get("language", "en"))
+        self.title(t("app.title"))
         ctk.set_appearance_mode(settings.get("theme", "system"))
         ui_scale = settings.get("ui_scale", 1.0)
         if ui_scale != 1.0:
@@ -92,8 +128,8 @@ class App(ctk.CTk):
         self._chapter_vars: list[ctk.BooleanVar] = []
 
         self._tray = TrayManager(
-            on_show=lambda: self.after(0, self._tray_show),
-            on_quit=lambda: self.after(0, self._tray_quit),
+            on_show=self._tray_show,
+            on_quit=self._tray_quit,
         )
         self._tray_notified_minimize: bool = False
 
@@ -108,7 +144,30 @@ class App(ctk.CTk):
             self._start_clipboard_monitor()
 
         self._tray.start()
+        self._poll_tray()
+        self._drain_main_queue()
         self.after(200, self._startup_checks)
+
+    # -------------------------------------------------- Thread-safe dispatcher
+
+    def _call_on_main(self, func: Callable[[], None]) -> None:
+        """Schedule *func* to run on the main thread.
+
+        Safe to call from any thread — never touches Tkinter directly.
+        The main-thread poller ``_drain_main_queue`` picks it up.
+        """
+        self._main_queue.put(func)
+
+    def _drain_main_queue(self) -> None:
+        """Process pending callbacks from background threads (runs on main thread)."""
+        while True:
+            try:
+                func = self._main_queue.get_nowait()
+            except queue.Empty:
+                break
+            with contextlib.suppress(Exception):
+                func()
+        self.after(16, self._drain_main_queue)
 
     # --------------------------------------------------------- Startup checks
     def _startup_checks(self) -> None:
@@ -120,7 +179,7 @@ class App(ctk.CTk):
 
         def _on_update(version: str | None, url: str | None) -> None:
             if version and url:
-                self.after(0, lambda: self._show_update_banner(version, url))
+                self._call_on_main(lambda: self._show_update_banner(version, url))
 
         check_for_update(_on_update)
 
@@ -137,33 +196,34 @@ class App(ctk.CTk):
     def _show_update_banner(self, version: str, url: str) -> None:
         self._update_banner = ctk.CTkFrame(self._scroll_container, fg_color="#d1ecf1", corner_radius=6)
         self._update_banner.grid(row=0, column=0, padx=16, pady=(8, 0), sticky="ew")
-        self._update_banner.grid_columnconfigure(0, weight=1)
+        # cols 0=text(weight)  1=download  2=dismiss  → max_col=2
+        self._update_banner.grid_columnconfigure(_c(0, 2), weight=1)
 
         ctk.CTkLabel(
             self._update_banner,
-            text=f"A new version (v{version}) is available!",
+            text=t("update.banner", version=version),
             font=ctk.CTkFont(size=12),
             text_color="#0c5460",
-            anchor="w",
-        ).grid(row=0, column=0, padx=12, pady=8, sticky="w")
+            anchor=_anchor_start(),
+        ).grid(row=0, column=_c(0, 2), padx=12, pady=8, sticky=_sticky_start())
 
         ctk.CTkButton(
             self._update_banner,
-            text="Download",
+            text=t("update.download"),
             width=80,
             height=24,
             font=ctk.CTkFont(size=11),
             command=lambda: webbrowser.open(url),
-        ).grid(row=0, column=1, padx=4, pady=8)
+        ).grid(row=0, column=_c(1, 2), padx=4, pady=8)
 
         ctk.CTkButton(
             self._update_banner,
-            text="Dismiss",
+            text=t("update.dismiss"),
             width=60,
             height=24,
             font=ctk.CTkFont(size=11),
             command=self._update_banner.destroy,
-        ).grid(row=0, column=2, padx=(0, 8), pady=8)
+        ).grid(row=0, column=_c(2, 2), padx=_pad_end(8, 0), pady=8)
 
     def _shift_rows(self, start: int) -> None:
         """Banners insert at row 0; bump existing widgets down if needed."""
@@ -194,27 +254,28 @@ class App(ctk.CTk):
         self._url_frame.grid(row=row, column=0, padx=16, pady=(16, 8), sticky="ew")
         self._url_frame.grid_columnconfigure(0, weight=1)
 
+        # header: cols 0=label  1=toggle(weight)  2=settings  → max_col=2
         header = ctk.CTkFrame(self._url_frame, fg_color="transparent")
         header.grid(row=0, column=0, padx=12, pady=(10, 0), sticky="ew")
-        header.grid_columnconfigure(1, weight=1)
+        header.grid_columnconfigure(_c(1, 2), weight=1)
 
-        ctk.CTkLabel(header, text="URL:", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=0, column=0, sticky="w"
+        ctk.CTkLabel(header, text=t("url.label"), font=ctk.CTkFont(size=14, weight="bold")).grid(
+            row=0, column=_c(0, 2), sticky=_sticky_start()
         )
 
-        self._mode_var = ctk.StringVar(value="Single")
+        self._mode_var = ctk.StringVar(value=t("url.mode_single"))
         self._mode_toggle = ctk.CTkSegmentedButton(
-            header, values=["Single", "Multiple"], variable=self._mode_var,
+            header, values=[t("url.mode_single"), t("url.mode_multiple")], variable=self._mode_var,
             command=self._on_mode_toggle, width=160,
         )
-        self._mode_toggle.grid(row=0, column=1, padx=(8, 0), sticky="w")
+        self._mode_toggle.grid(row=0, column=_c(1, 2), padx=(8, 0), sticky=_sticky_start())
 
         self._settings_btn = ctk.CTkButton(
-            header, text="Settings", width=80, command=self._open_settings,
+            header, text=t("url.settings"), width=80, command=self._open_settings,
         )
-        self._settings_btn.grid(row=0, column=2, padx=(4, 0))
+        self._settings_btn.grid(row=0, column=_c(2, 2), padx=_pad_end(0, 4))
 
-        self._url_entry = ctk.CTkEntry(self._url_frame, font=ctk.CTkFont(size=13), placeholder_text="https://...")
+        self._url_entry = ctk.CTkEntry(self._url_frame, font=ctk.CTkFont(size=13), placeholder_text=t("url.placeholder"))
         self._url_entry.bind("<Return>", lambda _: self._on_download())
         self._url_entry.bind("<KeyRelease>", lambda _: self.after(50, self._check_url_changed))
 
@@ -223,30 +284,32 @@ class App(ctk.CTk):
 
         self._url_entry.grid(row=1, column=0, padx=12, pady=(6, 0), sticky="ew")
 
+        # actions: cols 0=paste  1=preview  2=label(weight)  → max_col=2
         actions = ctk.CTkFrame(self._url_frame, fg_color="transparent")
         actions.grid(row=2, column=0, padx=12, pady=(6, 0), sticky="ew")
-        actions.grid_columnconfigure(2, weight=1)
+        actions.grid_columnconfigure(_c(2, 2), weight=1)
 
-        self._paste_btn = ctk.CTkButton(actions, text="Paste", width=70, command=self._on_paste)
-        self._paste_btn.grid(row=0, column=0, padx=(0, 4))
+        self._paste_btn = ctk.CTkButton(actions, text=t("url.paste"), width=70, command=self._on_paste)
+        self._paste_btn.grid(row=0, column=_c(0, 2), padx=_pad_start(0, 4))
 
-        self._preview_btn = ctk.CTkButton(actions, text="Preview", width=70, command=self._on_preview)
-        self._preview_btn.grid(row=0, column=1)
+        self._preview_btn = ctk.CTkButton(actions, text=t("url.preview"), width=70, command=self._on_preview)
+        self._preview_btn.grid(row=0, column=_c(1, 2))
 
         self._preview_label = ctk.CTkLabel(
-            actions, text="", anchor="w", font=ctk.CTkFont(size=12),
+            actions, text="", anchor=_anchor_start(), font=ctk.CTkFont(size=12),
             wraplength=400,
         )
-        self._preview_label.grid(row=0, column=2, padx=(8, 0), sticky="ew")
+        self._preview_label.grid(row=0, column=_c(2, 2), padx=(8, 0), sticky="ew")
 
     # -- Format selection + download
     def _build_format_frame(self, row: int) -> None:
         frame = ctk.CTkFrame(self._scroll_container)
         frame.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
-        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_columnconfigure(_c(1, 3), weight=1)
 
-        ctk.CTkLabel(frame, text="Format:", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=0, column=0, padx=(12, 6), pady=(12, 4)
+        # row 0: cols 0=label  1=menu(weight)  2=download  3=cancel  → max_col=3
+        ctk.CTkLabel(frame, text=t("format.label"), font=ctk.CTkFont(size=14, weight="bold")).grid(
+            row=0, column=_c(0, 3), padx=_pad_start(12, 6), pady=(12, 4)
         )
 
         format_names = list(FORMAT_PRESETS.keys())
@@ -254,133 +317,136 @@ class App(ctk.CTk):
         self._format_menu = ctk.CTkOptionMenu(
             frame, variable=self._format_var, values=format_names, width=240
         )
-        self._format_menu.grid(row=0, column=1, padx=4, pady=(12, 4), sticky="w")
+        self._format_menu.grid(row=0, column=_c(1, 3), padx=4, pady=(12, 4), sticky=_sticky_start())
 
         self._download_btn = ctk.CTkButton(
             frame,
-            text="Download",
+            text=t("format.download"),
             width=130,
             fg_color="#28a745",
             hover_color="#218838",
             command=self._on_download,
         )
-        self._download_btn.grid(row=0, column=2, padx=(4, 6), pady=(12, 4))
+        self._download_btn.grid(row=0, column=_c(2, 3), padx=(4, 6), pady=(12, 4))
 
         self._cancel_btn = ctk.CTkButton(
             frame,
-            text="Cancel",
+            text=t("format.cancel"),
             width=80,
             fg_color="#dc3545",
             hover_color="#c82333",
             state="disabled",
             command=self._on_cancel,
         )
-        self._cancel_btn.grid(row=0, column=3, padx=(4, 12), pady=(12, 4))
+        self._cancel_btn.grid(row=0, column=_c(3, 3), padx=_pad_end(12, 4), pady=(12, 4))
 
         # Custom format checkbox (always visible in row 1)
         self._custom_format_var = ctk.BooleanVar(value=False)
         self._custom_format_checkbox = ctk.CTkCheckBox(
-            frame, text="Custom format (select streams)",
+            frame, text=t("format.custom_format"),
             variable=self._custom_format_var,
             font=ctk.CTkFont(size=13), command=self._on_custom_format_toggled,
         )
-        self._custom_format_checkbox.grid(row=1, column=0, columnspan=2, padx=12, pady=(0, 4), sticky="w")
+        self._custom_format_checkbox.grid(row=1, column=0, columnspan=2, padx=12, pady=(0, 4), sticky=_sticky_start())
 
         # Custom format picker (hidden until checkbox is checked)
+        # cols 0=vlabel  1=vmenu  2=alabel  3=amenu  4=status(weight) → max_col=4
         self._custom_format_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        self._custom_format_frame.grid_columnconfigure(4, weight=1)
+        self._custom_format_frame.grid_columnconfigure(_c(4, 4), weight=1)
 
         ctk.CTkLabel(
-            self._custom_format_frame, text="Video:", font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=0, padx=(0, 4))
+            self._custom_format_frame, text=t("format.video"), font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=_c(0, 4), padx=(0, 4))
 
         self._video_format_var = ctk.StringVar(value="")
         self._video_format_menu = ctk.CTkOptionMenu(
             self._custom_format_frame, variable=self._video_format_var,
-            values=["(preview first)"], width=260, state="disabled",
+            values=[t("format.preview_first")], width=260, state="disabled",
         )
-        self._video_format_menu.grid(row=0, column=1, padx=(0, 12))
+        self._video_format_menu.grid(row=0, column=_c(1, 4), padx=(0, 12))
 
         ctk.CTkLabel(
-            self._custom_format_frame, text="Audio:", font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=2, padx=(0, 4))
+            self._custom_format_frame, text=t("format.audio"), font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=_c(2, 4), padx=(0, 4))
 
         self._audio_format_var = ctk.StringVar(value="")
         self._audio_format_menu = ctk.CTkOptionMenu(
             self._custom_format_frame, variable=self._audio_format_var,
-            values=["(preview first)"], width=200, state="disabled",
+            values=[t("format.preview_first")], width=200, state="disabled",
         )
-        self._audio_format_menu.grid(row=0, column=3, padx=(0, 8))
+        self._audio_format_menu.grid(row=0, column=_c(3, 4), padx=(0, 8))
 
         self._format_status_label = ctk.CTkLabel(
             self._custom_format_frame, text="", font=ctk.CTkFont(size=11),
-            text_color="gray", anchor="w",
+            text_color="gray", anchor=_anchor_start(),
         )
-        self._format_status_label.grid(row=0, column=4, padx=(4, 0), sticky="w")
+        self._format_status_label.grid(row=0, column=_c(4, 4), padx=(4, 0), sticky=_sticky_start())
 
+        # Options row: cols 0=split  1=section  2=queue  3=playlist(weight)  → max_col=3
         opts = ctk.CTkFrame(frame, fg_color="transparent")
         opts.grid(row=3, column=0, columnspan=4, padx=12, pady=(0, 10), sticky="ew")
-        opts.grid_columnconfigure(3, weight=1)
+        opts.grid_columnconfigure(_c(3, 3), weight=1)
 
         self._split_chapters_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            opts, text="Split by chapters", variable=self._split_chapters_var,
+            opts, text=t("format.split_chapters"), variable=self._split_chapters_var,
             font=ctk.CTkFont(size=13),
-        ).grid(row=0, column=0, padx=(0, 16))
+        ).grid(row=0, column=_c(0, 3), padx=_pad_start(0, 16))
 
         self._section_var = ctk.BooleanVar(value=False)
         self._section_checkbox = ctk.CTkCheckBox(
-            opts, text="Download section", variable=self._section_var,
+            opts, text=t("format.download_section"), variable=self._section_var,
             font=ctk.CTkFont(size=13), command=self._on_section_toggled,
         )
-        self._section_checkbox.grid(row=0, column=1, padx=(0, 8))
+        self._section_checkbox.grid(row=0, column=_c(1, 3), padx=_pad_start(0, 8))
 
         self._playlist_label = ctk.CTkLabel(
-            opts, text="", anchor="e", font=ctk.CTkFont(size=12),
+            opts, text="", anchor=_sticky_end(), font=ctk.CTkFont(size=12),
         )
-        self._playlist_label.grid(row=0, column=3, sticky="e")
+        self._playlist_label.grid(row=0, column=_c(3, 3), sticky=_sticky_end())
 
         self._queue_label = ctk.CTkLabel(
-            opts, text="", anchor="e", font=ctk.CTkFont(size=12), text_color="gray",
+            opts, text="", anchor=_sticky_end(), font=ctk.CTkFont(size=12), text_color="gray",
         )
-        self._queue_label.grid(row=0, column=2, padx=(8, 8))
+        self._queue_label.grid(row=0, column=_c(2, 3), padx=(8, 8))
 
+        # Section frame: cols 0=startlbl  1=startentry  2=endlbl  3=endentry  4=error(weight)
         self._section_frame = ctk.CTkFrame(opts, fg_color="transparent")
-        self._section_frame.grid_columnconfigure(4, weight=1)
+        self._section_frame.grid_columnconfigure(_c(4, 4), weight=1)
 
         ctk.CTkLabel(
-            self._section_frame, text="Start:", font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=0, padx=(0, 4))
+            self._section_frame, text=t("format.section_start"), font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=_c(0, 4), padx=(0, 4))
 
         self._section_start_entry = ctk.CTkEntry(
             self._section_frame, width=90, font=ctk.CTkFont(size=12),
-            placeholder_text="0:00",
+            placeholder_text=t("format.section_start_placeholder"),
         )
-        self._section_start_entry.grid(row=0, column=1, padx=(0, 12))
+        self._section_start_entry.grid(row=0, column=_c(1, 4), padx=(0, 12))
 
         ctk.CTkLabel(
-            self._section_frame, text="End:", font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=2, padx=(0, 4))
+            self._section_frame, text=t("format.section_end"), font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=_c(2, 4), padx=(0, 4))
 
         self._section_end_entry = ctk.CTkEntry(
             self._section_frame, width=90, font=ctk.CTkFont(size=12),
-            placeholder_text="1:30",
+            placeholder_text=t("format.section_end_placeholder"),
         )
-        self._section_end_entry.grid(row=0, column=3, padx=(0, 12))
+        self._section_end_entry.grid(row=0, column=_c(3, 4), padx=(0, 12))
 
         self._section_error_label = ctk.CTkLabel(
             self._section_frame, text="", font=ctk.CTkFont(size=11),
-            text_color="#dc3545", anchor="w",
+            text_color="#dc3545", anchor=_anchor_start(),
         )
-        self._section_error_label.grid(row=0, column=4, sticky="w")
+        self._section_error_label.grid(row=0, column=_c(4, 4), sticky=_sticky_start())
 
-        # Post-processing options row
+        # Post-processing row: cols 0=cvtlbl  1=cvtmenu  2=sublbl  3=submenu  4=burn
         pp_frame = ctk.CTkFrame(frame, fg_color="transparent")
         pp_frame.grid(row=4, column=0, columnspan=4, padx=12, pady=(0, 10), sticky="ew")
 
         ctk.CTkLabel(
-            pp_frame, text="Convert:", font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=0, padx=(0, 4))
+            pp_frame, text=t("format.convert"), font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=_c(0, 4), padx=(0, 4))
 
         convert_values = [
             "None", "MP4", "MKV", "WebM", "MP3", "AAC", "FLAC", "WAV", "OGG",
@@ -395,11 +461,11 @@ class App(ctk.CTk):
             pp_frame, variable=self._convert_var, values=convert_values,
             width=90, command=self._on_convert_changed,
         )
-        self._convert_menu.grid(row=0, column=1, padx=(0, 16))
+        self._convert_menu.grid(row=0, column=_c(1, 4), padx=(0, 16))
 
         ctk.CTkLabel(
-            pp_frame, text="Subs:", font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=2, padx=(0, 4))
+            pp_frame, text=t("format.subs"), font=ctk.CTkFont(size=12),
+        ).grid(row=0, column=_c(2, 4), padx=(0, 4))
 
         sub_values = ["None", "Embed", "File"]
         current_sub = settings.get("subtitle_mode", "")
@@ -409,50 +475,50 @@ class App(ctk.CTk):
             pp_frame, variable=self._subtitle_mode_var, values=sub_values,
             width=90, command=self._on_subtitle_mode_changed,
         )
-        self._subtitle_mode_menu.grid(row=0, column=3, padx=(0, 8))
+        self._subtitle_mode_menu.grid(row=0, column=_c(3, 4), padx=(0, 8))
 
         self._burn_sub_var = ctk.BooleanVar(value=settings.get("subtitle_burn", False))
         self._burn_sub_checkbox = ctk.CTkCheckBox(
-            pp_frame, text="Burn subs", variable=self._burn_sub_var,
+            pp_frame, text=t("format.burn_subs"), variable=self._burn_sub_var,
             font=ctk.CTkFont(size=12),
             command=lambda: self._state.save_settings(subtitle_burn=self._burn_sub_var.get()),
         )
-        self._burn_sub_checkbox.grid(row=0, column=4, padx=(0, 8))
+        self._burn_sub_checkbox.grid(row=0, column=_c(4, 4), padx=(0, 8))
 
-        # Subtitle summary row (hidden until preview)
+        # Subtitle summary row: cols 0=label(weight)  1=edit  → max_col=1
         self._subtitle_summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        self._subtitle_summary_frame.grid_columnconfigure(0, weight=1)
+        self._subtitle_summary_frame.grid_columnconfigure(_c(0, 1), weight=1)
 
         self._subtitle_summary_label = ctk.CTkLabel(
-            self._subtitle_summary_frame, text="Subtitles: none selected",
-            font=ctk.CTkFont(size=12), anchor="w",
+            self._subtitle_summary_frame, text=t("format.subtitle_none"),
+            font=ctk.CTkFont(size=12), anchor=_anchor_start(),
         )
-        self._subtitle_summary_label.grid(row=0, column=0, sticky="w")
+        self._subtitle_summary_label.grid(row=0, column=_c(0, 1), sticky=_sticky_start())
 
         self._subtitle_edit_btn = ctk.CTkButton(
-            self._subtitle_summary_frame, text="Edit…", width=60, height=24,
+            self._subtitle_summary_frame, text=t("format.edit"), width=60, height=24,
             font=ctk.CTkFont(size=11), command=self._open_subtitle_picker_dialog,
         )
-        self._subtitle_edit_btn.grid(row=0, column=1, padx=(8, 0))
+        self._subtitle_edit_btn.grid(row=0, column=_c(1, 1), padx=_pad_end(0, 8))
 
         self._subtitle_select_all_var = ctk.BooleanVar(value=False)
         self._subtitle_dialog: ctk.CTkToplevel | None = None
 
-        # Chapter summary row (hidden until preview)
+        # Chapter summary row: cols 0=label(weight)  1=edit  → max_col=1
         self._chapter_summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        self._chapter_summary_frame.grid_columnconfigure(0, weight=1)
+        self._chapter_summary_frame.grid_columnconfigure(_c(0, 1), weight=1)
 
         self._chapter_summary_label = ctk.CTkLabel(
-            self._chapter_summary_frame, text="Chapters: all selected",
-            font=ctk.CTkFont(size=12), anchor="w",
+            self._chapter_summary_frame, text=t("format.chapters_all"),
+            font=ctk.CTkFont(size=12), anchor=_anchor_start(),
         )
-        self._chapter_summary_label.grid(row=0, column=0, sticky="w")
+        self._chapter_summary_label.grid(row=0, column=_c(0, 1), sticky=_sticky_start())
 
         self._chapter_edit_btn = ctk.CTkButton(
-            self._chapter_summary_frame, text="Edit…", width=60, height=24,
+            self._chapter_summary_frame, text=t("format.edit"), width=60, height=24,
             font=ctk.CTkFont(size=11), command=self._open_chapter_picker_dialog,
         )
-        self._chapter_edit_btn.grid(row=0, column=1, padx=(8, 0))
+        self._chapter_edit_btn.grid(row=0, column=_c(1, 1), padx=_pad_end(0, 8))
 
         self._chapter_select_all_var = ctk.BooleanVar(value=True)
         self._chapter_dialog: ctk.CTkToplevel | None = None
@@ -461,10 +527,11 @@ class App(ctk.CTk):
     def _build_output_frame(self, row: int) -> None:
         frame = ctk.CTkFrame(self._scroll_container)
         frame.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
-        frame.grid_columnconfigure(1, weight=1)
+        # cols 0=label  1=menu(weight)  2=browse  → max_col=2
+        frame.grid_columnconfigure(_c(1, 2), weight=1)
 
-        ctk.CTkLabel(frame, text="Save to:", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=0, column=0, padx=(12, 6), pady=12
+        ctk.CTkLabel(frame, text=t("output.label"), font=ctk.CTkFont(size=14, weight="bold")).grid(
+            row=0, column=_c(0, 2), padx=_pad_start(12, 6), pady=12
         )
 
         recent = self._state.recent_folders or [self._output_dir]
@@ -473,10 +540,10 @@ class App(ctk.CTk):
             frame, variable=self._folder_var, values=recent,
             command=self._on_folder_selected, dynamic_resizing=False,
         )
-        self._folder_menu.grid(row=0, column=1, padx=4, pady=12, sticky="ew")
+        self._folder_menu.grid(row=0, column=_c(1, 2), padx=4, pady=12, sticky="ew")
 
-        ctk.CTkButton(frame, text="Browse...", width=90, command=self._on_browse).grid(
-            row=0, column=2, padx=(4, 12), pady=12
+        ctk.CTkButton(frame, text=t("output.browse"), width=90, command=self._on_browse).grid(
+            row=0, column=_c(2, 2), padx=_pad_end(12, 4), pady=12
         )
 
     # -- Progress bar
@@ -485,26 +552,27 @@ class App(ctk.CTk):
         self._progress_frame.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
         self._progress_frame.grid_columnconfigure(0, weight=1)
 
+        # header: cols 0=overall(weight)  1=(toggle placeholder)  2=(placeholder)  3=open folder
         progress_header = ctk.CTkFrame(self._progress_frame, fg_color="transparent")
         progress_header.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 2), sticky="ew")
-        progress_header.grid_columnconfigure(0, weight=1)
+        progress_header.grid_columnconfigure(_c(0, 3), weight=1)
 
         self._overall_label = ctk.CTkLabel(
-            progress_header, text="", anchor="w", font=ctk.CTkFont(size=12, weight="bold"),
+            progress_header, text="", anchor=_anchor_start(), font=ctk.CTkFont(size=12, weight="bold"),
         )
-        self._overall_label.grid(row=0, column=0, sticky="w")
+        self._overall_label.grid(row=0, column=_c(0, 3), sticky=_sticky_start())
 
-        self._progress_view_var = ctk.StringVar(value="Simple")
+        self._progress_view_var = ctk.StringVar(value=t("progress.view_simple"))
         self._progress_view_toggle = ctk.CTkSegmentedButton(
-            progress_header, values=["Simple", "Detailed"], variable=self._progress_view_var,
+            progress_header, values=[t("progress.view_simple"), t("progress.view_detailed")], variable=self._progress_view_var,
             command=self._on_progress_view_toggle, width=150,
         )
 
         self._open_folder_btn = ctk.CTkButton(
-            progress_header, text="Open Folder", width=90,
+            progress_header, text=t("progress.open_folder"), width=90,
             state="disabled", command=self._on_open_folder,
         )
-        self._open_folder_btn.grid(row=0, column=3, padx=(4, 0))
+        self._open_folder_btn.grid(row=0, column=_c(3, 3), padx=_pad_end(0, 4))
 
         # Simple progress view
         self._simple_progress_frame = ctk.CTkFrame(self._progress_frame, fg_color="transparent")
@@ -512,7 +580,7 @@ class App(ctk.CTk):
         self._simple_progress_frame.grid_columnconfigure(0, weight=1)
 
         self._title_label = ctk.CTkLabel(
-            self._simple_progress_frame, text="No video loaded", anchor="w", font=ctk.CTkFont(size=13)
+            self._simple_progress_frame, text=t("progress.no_video"), anchor=_anchor_start(), font=ctk.CTkFont(size=13)
         )
         self._title_label.grid(row=0, column=0, padx=12, pady=(2, 2), sticky="ew")
 
@@ -521,7 +589,7 @@ class App(ctk.CTk):
         self._progress_bar.set(0)
 
         self._progress_detail = ctk.CTkLabel(
-            self._simple_progress_frame, text="0% | -- B/s | ETA --:--", anchor="w", font=ctk.CTkFont(size=12)
+            self._simple_progress_frame, text=t("progress.initial"), anchor=_anchor_start(), font=ctk.CTkFont(size=12)
         )
         self._progress_detail.grid(row=2, column=0, padx=12, pady=(2, 10), sticky="ew")
 
@@ -531,7 +599,7 @@ class App(ctk.CTk):
         )
 
     def _on_progress_view_toggle(self, value: str) -> None:
-        view = value.lower()
+        view = "detailed" if value == t("progress.view_detailed") else "simple"
         if view == self._progress_view:
             return
         self._progress_view = view
@@ -539,7 +607,8 @@ class App(ctk.CTk):
 
     def _switch_progress_view(self, view: str) -> None:
         self._progress_view = view
-        self._progress_view_var.set(view.capitalize())
+        label = t("progress.view_detailed") if view == "detailed" else t("progress.view_simple")
+        self._progress_view_var.set(label)
         if view == "simple":
             self._detailed_progress_frame.grid_forget()
             self._simple_progress_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
@@ -554,37 +623,38 @@ class App(ctk.CTk):
         self._queue_panel.grid(row=row, column=0, padx=16, pady=4, sticky="ew")
         self._queue_panel.grid_columnconfigure(0, weight=1)
 
+        # header: cols 0=title(weight)  1=clear  2=start  → max_col=2
         header = ctk.CTkFrame(self._queue_panel, fg_color="transparent")
         header.grid(row=0, column=0, padx=12, pady=(8, 4), sticky="ew")
-        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(_c(0, 2), weight=1)
 
         self._queue_header_label = ctk.CTkLabel(
-            header, text="Queue", font=ctk.CTkFont(size=13, weight="bold"), anchor="w",
+            header, text=t("queue.title"), font=ctk.CTkFont(size=13, weight="bold"), anchor=_anchor_start(),
         )
-        self._queue_header_label.grid(row=0, column=0, sticky="w")
+        self._queue_header_label.grid(row=0, column=_c(0, 2), sticky=_sticky_start())
 
         self._queue_clear_btn = ctk.CTkButton(
-            header, text="Clear", width=60, height=24,
+            header, text=t("queue.clear"), width=60, height=24,
             font=ctk.CTkFont(size=11),
             fg_color="#dc3545", hover_color="#c82333",
             command=self._clear_queue,
         )
 
         self._queue_start_btn = ctk.CTkButton(
-            header, text="Start Queue", width=90, height=24,
+            header, text=t("queue.start"), width=90, height=24,
             font=ctk.CTkFont(size=11),
             fg_color="#28a745", hover_color="#218838",
             command=self._start_queue,
         )
 
         self._queue_empty_label = ctk.CTkLabel(
-            self._queue_panel, text="Queue is empty — downloads you add while one is running will appear here.",
-            font=ctk.CTkFont(size=12), text_color="gray", anchor="w",
+            self._queue_panel, text=t("queue.empty"),
+            font=ctk.CTkFont(size=12), text_color="gray", anchor=_anchor_start(),
         )
-        self._queue_empty_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="w")
+        self._queue_empty_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky=_sticky_start())
 
         self._queue_scroll = ctk.CTkScrollableFrame(self._queue_panel, height=100)
-        self._queue_scroll.grid_columnconfigure(1, weight=1)
+        self._queue_scroll.grid_columnconfigure(_c(1, 2), weight=1)
 
         self._queue_rows: list[dict] = []
 
@@ -595,46 +665,47 @@ class App(ctk.CTk):
         self._queue_rows = []
 
         if not self._queue:
-            self._queue_header_label.configure(text="Queue")
+            self._queue_header_label.configure(text=t("queue.title"))
             self._queue_clear_btn.grid_forget()
             self._queue_start_btn.grid_forget()
             self._queue_scroll.grid_forget()
-            self._queue_empty_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="w")
+            self._queue_empty_label.grid(row=1, column=0, padx=12, pady=(0, 8), sticky=_sticky_start())
             return
 
         self._queue_empty_label.grid_forget()
-        self._queue_header_label.configure(text=f"Queue ({len(self._queue)})")
-        self._queue_clear_btn.grid(row=0, column=1, padx=(4, 0))
-        self._queue_start_btn.grid(row=0, column=2, padx=(4, 0))
+        self._queue_header_label.configure(text=t("queue.title_count", count=len(self._queue)))
+        self._queue_clear_btn.grid(row=0, column=_c(1, 2), padx=(4, 0))
+        self._queue_start_btn.grid(row=0, column=_c(2, 2), padx=(4, 0))
         self._queue_scroll.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="ew")
 
+        # each row: cols 0=idx  1=title(weight)  2=buttons  → max_col=2
         for i, entry in enumerate(self._queue):
             row_frame = ctk.CTkFrame(self._queue_scroll, fg_color="transparent")
             row_frame.grid(row=i, column=0, sticky="ew", pady=2)
-            row_frame.grid_columnconfigure(1, weight=1)
+            row_frame.grid_columnconfigure(_c(1, 2), weight=1)
 
             idx_label = ctk.CTkLabel(
                 row_frame, text=f"{i + 1}.", width=24,
                 font=ctk.CTkFont(size=12),
             )
-            idx_label.grid(row=0, column=0, padx=(4, 4))
+            idx_label.grid(row=0, column=_c(0, 2), padx=(4, 4))
 
             url_count = len(entry.get("urls", []))
             first_url = truncate_filename(entry["urls"][0], 35) if entry.get("urls") else "?"
             fmt = entry.get("format_key", "Best")
             if url_count == 1:
-                display = f"{first_url}  [{fmt}]"
+                display = t("queue.display_single", url=first_url, fmt=fmt)
             else:
-                display = f"{first_url} +{url_count - 1} more  [{fmt}]"
+                display = t("queue.display_multi", url=first_url, extra=url_count - 1, fmt=fmt)
 
             title_label = ctk.CTkLabel(
-                row_frame, text=display, anchor="w",
+                row_frame, text=display, anchor=_anchor_start(),
                 font=ctk.CTkFont(size=12),
             )
-            title_label.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+            title_label.grid(row=0, column=_c(1, 2), sticky="ew", padx=(0, 4))
 
             btn_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
-            btn_frame.grid(row=0, column=2, padx=(0, 4))
+            btn_frame.grid(row=0, column=_c(2, 2), padx=(0, 4))
 
             up_btn = ctk.CTkButton(
                 btn_frame, text="\u25B2", width=28, height=22,
@@ -674,14 +745,14 @@ class App(ctk.CTk):
         self._persist_queue()
         self._update_queue_label()
         self._rebuild_queue_rows()
-        self._log("Queue cleared.")
+        self._log(t("log.queue_cleared"))
 
     def _start_queue(self) -> None:
         """Start processing the queue if not already downloading."""
         if not self._queue:
             return
         if self._manager.is_busy:
-            self._log("A download is already in progress. Queue will process automatically.")
+            self._log(t("log.already_downloading"))
             return
         self._process_queue()
 
@@ -701,7 +772,7 @@ class App(ctk.CTk):
             self._persist_queue()
             self._update_queue_label()
             self._rebuild_queue_rows()
-            self._log(f"Removed from queue: {truncate_filename(urls[0], 40) if urls else '?'}")
+            self._log(t("log.removed_from_queue", url=truncate_filename(urls[0], 40) if urls else "?"))
 
     # -- Log / status area
     def _build_log_frame(self, row: int) -> None:
@@ -710,19 +781,20 @@ class App(ctk.CTk):
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(1, weight=1)
 
+        # header: cols 0=title(weight)  1=toggle  → max_col=1
         header = ctk.CTkFrame(frame, fg_color="transparent")
         header.grid(row=0, column=0, padx=8, pady=(8, 0), sticky="ew")
-        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(_c(0, 1), weight=1)
 
-        ctk.CTkLabel(header, text="Log", font=ctk.CTkFont(size=12, weight="bold"), anchor="w").grid(
-            row=0, column=0, sticky="w"
+        ctk.CTkLabel(header, text=t("log.title"), font=ctk.CTkFont(size=12, weight="bold"), anchor=_anchor_start()).grid(
+            row=0, column=_c(0, 1), sticky=_sticky_start()
         )
 
         self._history_toggle_btn = ctk.CTkButton(
-            header, text="Show History", width=100, height=24,
+            header, text=t("log.show_history"), width=100, height=24,
             font=ctk.CTkFont(size=11), command=self._toggle_history,
         )
-        self._history_toggle_btn.grid(row=0, column=1, padx=(4, 0))
+        self._history_toggle_btn.grid(row=0, column=_c(1, 1), padx=_pad_end(0, 4))
 
         self._log_box = ctk.CTkTextbox(frame, height=100, state="disabled", font=ctk.CTkFont(size=12))
         self._log_box.grid(row=1, column=0, padx=8, pady=(4, 8), sticky="nsew")
@@ -737,18 +809,19 @@ class App(ctk.CTk):
     def _build_status_bar(self, row: int) -> None:
         bar = ctk.CTkFrame(self._scroll_container, fg_color="transparent")
         bar.grid(row=row, column=0, padx=20, pady=(0, 6), sticky="ew")
-        bar.grid_columnconfigure(0, weight=1)
+        # cols 0=stats(weight)  1=version  → max_col=1
+        bar.grid_columnconfigure(_c(0, 1), weight=1)
 
         self._status_bar = ctk.CTkLabel(
-            bar, text="", anchor="w", font=ctk.CTkFont(size=11), text_color="gray",
+            bar, text="", anchor=_anchor_start(), font=ctk.CTkFont(size=11), text_color="gray",
         )
-        self._status_bar.grid(row=0, column=0, sticky="w")
+        self._status_bar.grid(row=0, column=_c(0, 1), sticky=_sticky_start())
 
         self._version_label = ctk.CTkLabel(
-            bar, text=f"v{APP_VERSION}", anchor="e",
+            bar, text=f"v{APP_VERSION}", anchor=_sticky_end(),
             font=ctk.CTkFont(size=10), text_color="gray",
         )
-        self._version_label.grid(row=0, column=1, sticky="e")
+        self._version_label.grid(row=0, column=_c(1, 1), sticky=_sticky_end())
 
         self._refresh_status_bar()
 
@@ -759,7 +832,7 @@ class App(ctk.CTk):
         playlists = s["total_playlist_downloads"]
         transferred = format_bytes(s["total_bytes"])
         self._status_bar.configure(
-            text=f"Videos: {videos} | Audio: {audio} | Playlists: {playlists} | Transferred: {transferred}"
+            text=t("status.bar", videos=videos, audio=audio, playlists=playlists, transferred=transferred)
         )
 
     # ----------------------------------------------------------- Drag-and-drop
@@ -806,7 +879,7 @@ class App(ctk.CTk):
         self._current_item_index = 0
         self._total_items = len(urls)
         if self._input_mode == "multiple":
-            self._overall_label.configure(text=f"Overall: 0 of {self._total_items}")
+            self._overall_label.configure(text=t("progress.overall", done=0, total=self._total_items))
         if self._progress_view == "detailed":
             self._rebuild_detail_rows()
 
@@ -815,44 +888,45 @@ class App(ctk.CTk):
         for widget in self._detailed_progress_frame.winfo_children():
             widget.destroy()
         self._detail_rows = []
-        self._detailed_progress_frame.grid_columnconfigure(1, weight=1)
+        self._detailed_progress_frame.grid_columnconfigure(_c(1, 4), weight=1)
 
+        # each row: cols 0=icon  1=title(weight)  2=bar  3=info  4=retry  → max_col=4
         for i, item in enumerate(self._download_items):
             row_frame = ctk.CTkFrame(self._detailed_progress_frame, fg_color="transparent")
-            row_frame.grid(row=i, column=0, columnspan=3, sticky="ew", pady=2)
-            row_frame.grid_columnconfigure(1, weight=1)
+            row_frame.grid(row=i, column=0, columnspan=5, sticky="ew", pady=2)
+            row_frame.grid_columnconfigure(_c(1, 4), weight=1)
 
             status_label = ctk.CTkLabel(
                 row_frame, text=self._status_icon(item["status"]), width=24,
                 font=ctk.CTkFont(size=13),
             )
-            status_label.grid(row=0, column=0, padx=(4, 4))
+            status_label.grid(row=0, column=_c(0, 4), padx=(4, 4))
 
             display = item["title"] or truncate_filename(item["url"], 40)
             title_label = ctk.CTkLabel(
-                row_frame, text=display, anchor="w",
+                row_frame, text=display, anchor=_anchor_start(),
                 font=ctk.CTkFont(size=12),
             )
-            title_label.grid(row=0, column=1, sticky="ew", padx=(0, 4))
+            title_label.grid(row=0, column=_c(1, 4), sticky="ew", padx=(0, 4))
 
             bar = ctk.CTkProgressBar(row_frame, width=120, height=12)
-            bar.grid(row=0, column=2, padx=(0, 4))
+            bar.grid(row=0, column=_c(2, 4), padx=(0, 4))
             bar.set(item["progress"])
 
             info_label = ctk.CTkLabel(
-                row_frame, text=self._status_text(item), anchor="e",
+                row_frame, text=self._status_text(item), anchor=_sticky_end(),
                 font=ctk.CTkFont(size=11), width=60,
             )
-            info_label.grid(row=0, column=3, padx=(0, 4))
+            info_label.grid(row=0, column=_c(3, 4), padx=(0, 4))
 
             retry_btn = ctk.CTkButton(
-                row_frame, text="Retry", width=50, height=22,
+                row_frame, text=t("progress.retry"), width=50, height=22,
                 font=ctk.CTkFont(size=10),
                 fg_color="#dc3545", hover_color="#c82333",
                 command=lambda idx=i: self._retry_item(idx),
             )
             if item["status"] == "failed":
-                retry_btn.grid(row=0, column=4, padx=(0, 4))
+                retry_btn.grid(row=0, column=_c(4, 4), padx=(0, 4))
 
             self._detail_rows.append({
                 "frame": row_frame,
@@ -877,7 +951,7 @@ class App(ctk.CTk):
         row["info_label"].configure(text=self._status_text(item))
 
         if item["status"] == "failed":
-            row["retry_btn"].grid(row=0, column=4, padx=(0, 4))
+            row["retry_btn"].grid(row=0, column=_c(4, 4), padx=(0, 4))
         else:
             row["retry_btn"].grid_forget()
 
@@ -889,14 +963,14 @@ class App(ctk.CTk):
     def _status_text(item: dict) -> str:
         status = item["status"]
         if status == "queued":
-            return "Queued"
+            return t("progress.status_queued")
         if status == "downloading":
             pct = item["progress"] * 100
             return f"{pct:.0f}%"
         if status == "done":
-            return "Done"
+            return t("progress.status_done")
         if status == "failed":
-            return "Failed"
+            return t("progress.status_failed")
         return ""
 
     def _retry_item(self, index: int) -> None:
@@ -912,7 +986,7 @@ class App(ctk.CTk):
             self._persist_queue()
             self._update_queue_label()
             self._rebuild_queue_rows()
-            self._log(f"Queued retry for: {truncate_filename(item['url'], 50)}")
+            self._log(t("log.queued_retry", url=truncate_filename(item["url"], 50)))
             return
 
         item["status"] = "queued"
@@ -935,13 +1009,15 @@ class App(ctk.CTk):
         self._cancel_btn.configure(state="normal")
 
         def on_progress(data: dict) -> None:
-            self.after(0, lambda d=data: self._update_retry_progress(d, item_index))
+            def _cb(d: dict = data) -> None:
+                self._update_retry_progress(d, item_index)
+            self._call_on_main(_cb)
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
-            self.after(0, lambda: self._retry_item_finished(item_index, error))
+            self._call_on_main(lambda: self._retry_item_finished(item_index, error))
 
         def on_done(error: str | None) -> None:
-            self.after(0, lambda: self._download_finished(error))
+            self._call_on_main(lambda: self._download_finished(error))
 
         self._manager.download_batch(
             [url], format_key, self._output_dir,
@@ -981,13 +1057,13 @@ class App(ctk.CTk):
         if error:
             item["status"] = "failed"
             item["error"] = error
-            self._log(f"Retry failed: {error}")
+            self._log(t("log.retry_failed", error=error))
             url = item["url"]
             self._state.record_failed(title=item.get("title", ""), url=url)
         else:
             item["status"] = "done"
             item["progress"] = 1.0
-            self._log(f"Retry done: {item.get('title') or item['url']}")
+            self._log(t("log.retry_done", title=item.get("title") or item["url"]))
             self._state.record_download(
                 bytes_downloaded=self._accumulated_bytes,
                 is_audio=self._is_audio_download,
@@ -1010,7 +1086,20 @@ class App(ctk.CTk):
             self,
             self._state,
             on_clipboard_changed=self._on_clipboard_setting_changed,
+            on_language_changed=self._on_language_changed,
         )
+
+    def _on_language_changed(self, code: str) -> None:
+        """Reload the i18n strings and rebuild the entire UI live."""
+        load_language(code)
+        self.title(t("app.title"))
+        for widget in self.winfo_children():
+            widget.destroy()
+        self._build_ui()
+        self._restore_state()
+        self._setup_dnd()
+        self._tray.update_tooltip(t("tray.tooltip"))
+        self._refresh_status_bar()
 
     def _on_clipboard_setting_changed(self, enabled: bool) -> None:
         if enabled:
@@ -1020,7 +1109,7 @@ class App(ctk.CTk):
 
     # ----------------------------------------------------------- Mode toggle
     def _on_mode_toggle(self, value: str) -> None:
-        mode = value.lower()
+        mode = "multiple" if value == t("url.mode_multiple") else "single"
         if mode == self._input_mode:
             return
         self._switch_mode(mode)
@@ -1028,7 +1117,8 @@ class App(ctk.CTk):
     def _switch_mode(self, mode: str) -> None:
         old_mode = self._input_mode
         self._input_mode = mode
-        self._mode_var.set(mode.capitalize())
+        label = t("url.mode_multiple") if mode == "multiple" else t("url.mode_single")
+        self._mode_var.set(label)
 
         if old_mode == "single":
             text = self._url_entry.get().strip()
@@ -1049,7 +1139,7 @@ class App(ctk.CTk):
             self._url_textbox.delete("1.0", "end")
             if text:
                 self._url_textbox.insert("1.0", text)
-            self._progress_view_toggle.grid(row=0, column=2, padx=(8, 0))
+            self._progress_view_toggle.grid(row=0, column=_c(2, 3), padx=(8, 0))
 
         self._update_section_visibility()
 
@@ -1077,7 +1167,7 @@ class App(ctk.CTk):
                 self._audio_format_menu.configure(state="normal")
             else:
                 self._format_status_label.configure(
-                    text="Click Preview to load available formats",
+                    text=t("format.load_formats_hint"),
                     text_color="#e0a800",
                 )
         else:
@@ -1095,18 +1185,18 @@ class App(ctk.CTk):
             self._video_format_menu.configure(values=labels, state="normal")
             self._video_format_var.set(labels[0])
         else:
-            self._video_format_menu.configure(values=["(none available)"], state="disabled")
-            self._video_format_var.set("(none available)")
+            self._video_format_menu.configure(values=[t("format.none_available")], state="disabled")
+            self._video_format_var.set(t("format.none_available"))
 
         if audio_formats:
             labels = [f["label"] for f in audio_formats]
             self._audio_format_menu.configure(values=labels, state="normal")
             self._audio_format_var.set(labels[0])
         else:
-            self._audio_format_menu.configure(values=["(none available)"], state="disabled")
-            self._audio_format_var.set("(none available)")
+            self._audio_format_menu.configure(values=[t("format.none_available")], state="disabled")
+            self._audio_format_var.set(t("format.none_available"))
 
-        count_str = f"{len(video_formats)} video, {len(audio_formats)} audio"
+        count_str = t("format.count", video=len(video_formats), audio=len(audio_formats))
         self._format_status_label.configure(text=count_str, text_color="#17a2b8")
 
     def _get_custom_format_string(self) -> str:
@@ -1167,23 +1257,15 @@ class App(ctk.CTk):
             self._subtitle_summary_frame.grid_forget()
             return
 
-        default_langs = [
-            lang.strip()
-            for lang in self._state.settings.get("subtitle_languages", "en").split(",")
-            if lang.strip()
-        ]
-
         for entry in subs["manual"]:
             code = entry["code"]
-            pre_selected = code in default_langs or "all" in default_langs
-            var = ctk.BooleanVar(value=pre_selected)
+            var = ctk.BooleanVar(value=False)
             self._subtitle_vars[code] = var
 
         for entry in subs["auto"]:
             code = entry["code"]
             key = f"auto:{code}"
-            pre_selected = code in default_langs or "all" in default_langs
-            var = ctk.BooleanVar(value=pre_selected)
+            var = ctk.BooleanVar(value=False)
             self._subtitle_vars[key] = var
 
         self._subtitle_select_all_var.set(False)
@@ -1205,11 +1287,11 @@ class App(ctk.CTk):
         total = len(self._subtitle_vars)
         selected = sum(1 for v in self._subtitle_vars.values() if v.get())
         if selected == 0:
-            text = f"Subtitles: none selected (of {total})"
+            text = t("format.subtitle_summary_none", total=total)
         elif selected == total:
-            text = f"Subtitles: all selected ({total})"
+            text = t("format.subtitle_summary_all", total=total)
         else:
-            text = f"Subtitles: {selected} of {total} selected"
+            text = t("format.subtitle_summary_some", selected=selected, total=total)
         self._subtitle_summary_label.configure(text=text)
 
     def _open_subtitle_picker_dialog(self) -> None:
@@ -1219,11 +1301,10 @@ class App(ctk.CTk):
             return
 
         dialog = ctk.CTkToplevel(self)
-        dialog.title("Select Subtitles")
+        dialog.title(t("format.subtitle_dialog_title"))
         dialog.geometry("400x350")
         dialog.minsize(320, 200)
         dialog.resizable(True, True)
-        dialog.transient(self)
         self._subtitle_dialog = dialog
 
         dialog.grid_columnconfigure(0, weight=1)
@@ -1231,19 +1312,19 @@ class App(ctk.CTk):
 
         header = ctk.CTkFrame(dialog, fg_color="transparent")
         header.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
-        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(_c(0, 1), weight=1)
 
         ctk.CTkLabel(
-            header, text="Subtitle Languages",
-            font=ctk.CTkFont(size=13, weight="bold"), anchor="w",
-        ).grid(row=0, column=0, sticky="w")
+            header, text=t("format.subtitle_languages"),
+            font=ctk.CTkFont(size=13, weight="bold"), anchor=_anchor_start(),
+        ).grid(row=0, column=_c(0, 1), sticky=_sticky_start())
 
         select_all_btn = ctk.CTkCheckBox(
-            header, text="Select All",
+            header, text=t("format.select_all"),
             variable=self._subtitle_select_all_var,
             font=ctk.CTkFont(size=11), command=self._on_subtitle_select_all,
         )
-        select_all_btn.grid(row=0, column=1, padx=(8, 0))
+        select_all_btn.grid(row=0, column=_c(1, 1), padx=_pad_end(0, 8))
 
         scroll = ctk.CTkScrollableFrame(dialog)
         scroll.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
@@ -1253,9 +1334,9 @@ class App(ctk.CTk):
         row = 0
         if subs["manual"]:
             ctk.CTkLabel(
-                scroll, text="Manual:",
-                font=ctk.CTkFont(size=11, weight="bold"), anchor="w",
-            ).grid(row=row, column=0, sticky="w", pady=(2, 2))
+                scroll, text=t("format.subtitle_manual"),
+                font=ctk.CTkFont(size=11, weight="bold"), anchor=_anchor_start(),
+            ).grid(row=row, column=0, sticky=_sticky_start(), pady=(2, 2))
             row += 1
             for entry in subs["manual"]:
                 code = entry["code"]
@@ -1265,15 +1346,14 @@ class App(ctk.CTk):
                 ctk.CTkCheckBox(
                     scroll, text=label, variable=var,
                     font=ctk.CTkFont(size=12),
-                    command=self._update_subtitle_summary,
-                ).grid(row=row, column=0, sticky="w", pady=1)
+                ).grid(row=row, column=0, sticky=_sticky_start(), pady=1)
                 row += 1
 
         if subs["auto"]:
             ctk.CTkLabel(
-                scroll, text="Auto-generated:",
-                font=ctk.CTkFont(size=11, weight="bold"), anchor="w",
-            ).grid(row=row, column=0, sticky="w", pady=(6, 2))
+                scroll, text=t("format.subtitle_auto"),
+                font=ctk.CTkFont(size=11, weight="bold"), anchor=_anchor_start(),
+            ).grid(row=row, column=0, sticky=_sticky_start(), pady=(6, 2))
             row += 1
             for entry in subs["auto"]:
                 code = entry["code"]
@@ -1284,15 +1364,22 @@ class App(ctk.CTk):
                 ctk.CTkCheckBox(
                     scroll, text=label, variable=var,
                     font=ctk.CTkFont(size=12),
-                    command=self._update_subtitle_summary,
-                ).grid(row=row, column=0, sticky="w", pady=1)
+                ).grid(row=row, column=0, sticky=_sticky_start(), pady=1)
                 row += 1
+
+        dialog.protocol("WM_DELETE_WINDOW", self._on_subtitle_dialog_close)
+
+    def _on_subtitle_dialog_close(self) -> None:
+        """Update summary when the subtitle picker dialog is closed."""
+        if self._subtitle_dialog and self._subtitle_dialog.winfo_exists():
+            self._subtitle_dialog.destroy()
+        self._subtitle_dialog = None
+        self._update_subtitle_summary()
 
     def _on_subtitle_select_all(self) -> None:
         select = self._subtitle_select_all_var.get()
         for var in self._subtitle_vars.values():
             var.set(select)
-        self._update_subtitle_summary()
 
     def _get_selected_subtitle_langs(self) -> list[str] | None:
         """Return list of selected subtitle language codes, or None if picker not used."""
@@ -1340,11 +1427,11 @@ class App(ctk.CTk):
         total = len(self._chapter_vars)
         selected = sum(1 for v in self._chapter_vars if v.get())
         if selected == total:
-            text = f"Chapters: all selected ({total})"
+            text = t("format.chapter_summary_all", total=total)
         elif selected == 0:
-            text = f"Chapters: none selected (of {total})"
+            text = t("format.chapter_summary_none", total=total)
         else:
-            text = f"Chapters: {selected} of {total} selected"
+            text = t("format.chapter_summary_some", selected=selected, total=total)
         self._chapter_summary_label.configure(text=text)
 
     def _open_chapter_picker_dialog(self) -> None:
@@ -1354,11 +1441,10 @@ class App(ctk.CTk):
             return
 
         dialog = ctk.CTkToplevel(self)
-        dialog.title("Select Chapters")
+        dialog.title(t("format.chapter_dialog_title"))
         dialog.geometry("400x350")
         dialog.minsize(320, 200)
         dialog.resizable(True, True)
-        dialog.transient(self)
         self._chapter_dialog = dialog
 
         dialog.grid_columnconfigure(0, weight=1)
@@ -1366,19 +1452,19 @@ class App(ctk.CTk):
 
         header = ctk.CTkFrame(dialog, fg_color="transparent")
         header.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
-        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(_c(0, 1), weight=1)
 
         ctk.CTkLabel(
-            header, text="Chapters",
-            font=ctk.CTkFont(size=13, weight="bold"), anchor="w",
-        ).grid(row=0, column=0, sticky="w")
+            header, text=t("format.chapters"),
+            font=ctk.CTkFont(size=13, weight="bold"), anchor=_anchor_start(),
+        ).grid(row=0, column=_c(0, 1), sticky=_sticky_start())
 
         select_all_btn = ctk.CTkCheckBox(
-            header, text="Select All",
+            header, text=t("format.select_all"),
             variable=self._chapter_select_all_var,
             font=ctk.CTkFont(size=11), command=self._on_chapter_select_all,
         )
-        select_all_btn.grid(row=0, column=1, padx=(8, 0))
+        select_all_btn.grid(row=0, column=_c(1, 1), padx=_pad_end(0, 8))
 
         scroll = ctk.CTkScrollableFrame(dialog)
         scroll.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
@@ -1391,14 +1477,21 @@ class App(ctk.CTk):
             ctk.CTkCheckBox(
                 scroll, text=label, variable=var,
                 font=ctk.CTkFont(size=12),
-                command=self._update_chapter_summary,
-            ).grid(row=i, column=0, sticky="w", pady=1)
+            ).grid(row=i, column=0, sticky=_sticky_start(), pady=1)
+
+        dialog.protocol("WM_DELETE_WINDOW", self._on_chapter_dialog_close)
+
+    def _on_chapter_dialog_close(self) -> None:
+        """Update summary when the chapter picker dialog is closed."""
+        if self._chapter_dialog and self._chapter_dialog.winfo_exists():
+            self._chapter_dialog.destroy()
+        self._chapter_dialog = None
+        self._update_chapter_summary()
 
     def _on_chapter_select_all(self) -> None:
         select = self._chapter_select_all_var.get()
         for var in self._chapter_vars:
             var.set(select)
-        self._update_chapter_summary()
 
     def _get_selected_chapters(self) -> list[str] | None:
         """Return list of selected chapter titles, or None if all selected or picker not used."""
@@ -1443,14 +1536,14 @@ class App(ctk.CTk):
         end = self._section_end_entry.get().strip()
 
         if not start and not end:
-            self._section_error_label.configure(text="Enter at least a start or end time.")
+            self._section_error_label.configure(text=t("section.error_enter_time"))
             return False
 
         if start and parse_timestamp(start) is None:
-            self._section_error_label.configure(text="Invalid start time format.")
+            self._section_error_label.configure(text=t("section.error_invalid_start"))
             return False
         if end and parse_timestamp(end) is None:
-            self._section_error_label.configure(text="Invalid end time format.")
+            self._section_error_label.configure(text=t("section.error_invalid_end"))
             return False
 
         err = validate_time_range(start, end)
@@ -1499,7 +1592,7 @@ class App(ctk.CTk):
                     else:
                         self._url_textbox.delete("1.0", "end")
                         self._url_textbox.insert("1.0", text)
-                self._log(f"Clipboard: added {text}")
+                self._log(t("log.clipboard_added", url=text))
 
         self._clipboard_last = text
         self._clipboard_job = self.after(1000, self._poll_clipboard)
@@ -1509,13 +1602,13 @@ class App(ctk.CTk):
         if self._history_visible:
             self._history_frame.grid_forget()
             self._log_box.grid(row=1, column=0, padx=8, pady=(4, 8), sticky="nsew")
-            self._history_toggle_btn.configure(text="Show History")
+            self._history_toggle_btn.configure(text=t("log.show_history"))
             self._history_visible = False
         else:
             self._populate_history()
             self._log_box.grid_forget()
             self._history_frame.grid(row=1, column=0, padx=0, pady=0, sticky="nsew")
-            self._history_toggle_btn.configure(text="Show Log")
+            self._history_toggle_btn.configure(text=t("log.show_log"))
             self._history_visible = True
 
     def _populate_history(self) -> None:
@@ -1524,11 +1617,11 @@ class App(ctk.CTk):
 
         entries = self._state.history
         if not entries:
-            self._history_textbox.insert("1.0", "No downloads yet.")
+            self._history_textbox.insert("1.0", t("history.empty"))
         else:
             for entry in reversed(entries):
-                status = "OK" if entry.get("status") == "ok" else "FAIL"
-                title = entry.get("title", "Unknown") or "Unknown"
+                status = t("history.status_ok") if entry.get("status") == "ok" else t("history.status_fail")
+                title = entry.get("title", t("history.unknown_title")) or t("history.unknown_title")
                 date = entry.get("date", "")[:19].replace("T", " ")
                 size = format_bytes(entry.get("bytes", 0))
                 url = entry.get("url", "")
@@ -1543,19 +1636,19 @@ class App(ctk.CTk):
     def _on_preview(self) -> None:
         urls = self._get_urls()
         if not urls:
-            self._preview_label.configure(text="Enter a URL first.", text_color="gray")
+            self._preview_label.configure(text=t("preview.enter_url"), text_color="gray")
             return
 
         url = urls[0]
         if not is_valid_url(url):
-            self._preview_label.configure(text="Invalid URL.", text_color="#dc3545")
+            self._preview_label.configure(text=t("preview.invalid_url"), text_color="#dc3545")
             return
 
-        self._preview_label.configure(text="Fetching info...", text_color="gray")
+        self._preview_label.configure(text=t("preview.fetching"), text_color="gray")
         self._preview_btn.configure(state="disabled")
 
         def _on_info(info: dict | None, error: str | None) -> None:
-            self.after(0, lambda: self._show_preview(info, error))
+            self._call_on_main(lambda: self._show_preview(info, error))
 
         self._manager.extract_info(url, _on_info)
 
@@ -1563,12 +1656,12 @@ class App(ctk.CTk):
         self._preview_btn.configure(state="normal")
         if error or not info:
             self._preview_label.configure(
-                text=f"Preview failed: {error or 'no data'}",
+                text=t("preview.failed", error=error or "no data"),
                 text_color="#dc3545",
             )
             return
 
-        title = info.get("title", "Unknown")
+        title = info.get("title", t("history.unknown_title"))
         duration = info.get("duration")
         uploader = info.get("uploader", "")
 
@@ -1580,13 +1673,13 @@ class App(ctk.CTk):
 
         parts = [title]
         if uploader:
-            parts.append(f"by {uploader}")
+            parts.append(t("preview.by_uploader", uploader=uploader))
         if dur_str:
             parts.append(f"[{dur_str}]")
 
         entries = info.get("entries")
         if entries:
-            parts.append(f"({len(entries)} items)")
+            parts.append(t("preview.items_count", count=len(entries)))
 
         self._preview_label.configure(text=" | ".join(parts), text_color="#17a2b8")
 
@@ -1609,7 +1702,8 @@ class App(ctk.CTk):
         if pview not in ("simple", "detailed"):
             pview = "simple"
         self._progress_view = pview
-        self._progress_view_var.set(pview.capitalize())
+        label = t("progress.view_detailed") if pview == "detailed" else t("progress.view_simple")
+        self._progress_view_var.set(label)
 
         if last.get("urls"):
             urls_text = "\n".join(last["urls"])
@@ -1658,7 +1752,7 @@ class App(ctk.CTk):
             self._queue = list(saved_queue)
             self._update_queue_label()
             self._rebuild_queue_rows()
-            self._log(f"Restored {len(self._queue)} queued item(s) from previous session.")
+            self._log(t("log.restored_queue", count=len(self._queue)))
 
     def _restore_geometry(self) -> None:
         geo = self._state.window_geometry
@@ -1670,10 +1764,13 @@ class App(ctk.CTk):
         if self._manager.is_busy and self._tray.available:
             self.withdraw()
             if not self._tray_notified_minimize:
-                self._tray.notify("yt-dlp GUI", "Minimized to tray — downloads continue.")
+                self._tray.notify(t("app.title"), t("notify.minimized"))
                 self._tray_notified_minimize = True
             return
-        self._shutdown()
+        try:
+            self._shutdown()
+        except Exception:
+            self.destroy()
 
     def _on_iconify(self, event: object) -> None:
         """Minimize to tray instead of taskbar when tray is available."""
@@ -1681,6 +1778,11 @@ class App(ctk.CTk):
             return
         if event and getattr(event, "widget", None) is self:
             self.withdraw()
+
+    def _poll_tray(self) -> None:
+        """Poll tray events from the main thread to avoid cross-thread Tk calls."""
+        self._tray.poll_events()
+        self.after(250, self._poll_tray)
 
     def _tray_show(self) -> None:
         self.deiconify()
@@ -1692,7 +1794,9 @@ class App(ctk.CTk):
         self._shutdown()
 
     def _shutdown(self) -> None:
-        self._state.window_geometry = self.geometry()
+        self._stop_clipboard_monitor()
+        with contextlib.suppress(Exception):
+            self._state.window_geometry = self.geometry()
         self._persist_queue()
         self._state.save()
         self._tray.stop()
@@ -1738,7 +1842,7 @@ class App(ctk.CTk):
                     self._url_textbox.delete("1.0", "end")
                     self._url_textbox.insert("1.0", text)
         except Exception:
-            self._log("Could not read clipboard.")
+            self._log(t("log.clipboard_error"))
 
     def _on_browse(self) -> None:
         directory = filedialog.askdirectory(initialdir=self._output_dir)
@@ -1757,9 +1861,9 @@ class App(ctk.CTk):
             return
         playlist_mode, ambiguous = self._classify_urls(urls)
         if playlist_mode:
-            self._playlist_label.configure(text="Playlist detected", text_color="#28a745")
+            self._playlist_label.configure(text=t("format.playlist_detected"), text_color="#28a745")
         elif ambiguous:
-            self._playlist_label.configure(text="Video+Playlist link (will ask)", text_color="#e0a800")
+            self._playlist_label.configure(text=t("format.playlist_ambiguous"), text_color="#e0a800")
         else:
             self._playlist_label.configure(text="")
 
@@ -1778,12 +1882,12 @@ class App(ctk.CTk):
     def _on_download(self) -> None:
         urls = self._get_urls()
         if not urls:
-            self._log("Please enter at least one URL.")
+            self._log(t("log.enter_url"))
             return
 
         invalid = [u for u in urls if not is_valid_url(u)]
         if invalid:
-            self._log(f"Invalid URL(s): {', '.join(invalid)}")
+            self._log(t("log.invalid_urls", urls=", ".join(invalid)))
             return
 
         if not self._validate_section():
@@ -1802,7 +1906,7 @@ class App(ctk.CTk):
             self._persist_queue()
             self._update_queue_label()
             self._rebuild_queue_rows()
-            self._log(f"Queued {len(urls)} URL(s) — will start when current download finishes.")
+            self._log(t("log.queued_urls", count=len(urls)))
             return
 
         self._start_download(urls, playlist=playlist_mode)
@@ -1836,7 +1940,7 @@ class App(ctk.CTk):
     def _update_queue_label(self) -> None:
         count = len(self._queue)
         if count:
-            self._queue_label.configure(text=f"Queue: {count}")
+            self._queue_label.configure(text=t("queue.label_count", count=count))
         else:
             self._queue_label.configure(text="")
 
@@ -1850,17 +1954,20 @@ class App(ctk.CTk):
 
     def _show_ambiguous_dialog(self, urls: list[str], ambiguous: list[str]) -> None:
         dialog = ctk.CTkToplevel(self)
-        dialog.title("Playlist detected")
+        dialog.title(t("dialog.playlist_title"))
         dialog.geometry("420x150")
         dialog.resizable(False, False)
         dialog.transient(self)
         dialog.grab_set()
 
         count = len(ambiguous)
-        noun = "URL contains" if count == 1 else f"{count} URLs contain"
+        if count == 1:
+            body = t("dialog.playlist_single_url")
+        else:
+            body = t("dialog.playlist_multi_url", count=count)
         ctk.CTkLabel(
             dialog,
-            text=f"{noun} both a video and a playlist.\nHow would you like to download?",
+            text=body,
             font=ctk.CTkFont(size=13),
             justify="center",
         ).pack(pady=(20, 16))
@@ -1876,17 +1983,17 @@ class App(ctk.CTk):
                 self._persist_queue()
                 self._update_queue_label()
                 self._rebuild_queue_rows()
-                self._log(f"Queued {len(urls)} URL(s).")
+                self._log(t("log.queued_urls_short", count=len(urls)))
             else:
                 self._start_download(urls, playlist=playlist)
 
         ctk.CTkButton(
-            btn_frame, text="Single video only", width=160,
+            btn_frame, text=t("dialog.single_video_only"), width=160,
             command=lambda: pick(False),
         ).pack(side="left", padx=8)
 
         ctk.CTkButton(
-            btn_frame, text="Entire playlist", width=160,
+            btn_frame, text=t("dialog.entire_playlist"), width=160,
             fg_color="#28a745", hover_color="#218838",
             command=lambda: pick(True),
         ).pack(side="left", padx=8)
@@ -1936,28 +2043,37 @@ class App(ctk.CTk):
         self._init_download_items(urls)
         self._folder_menu.configure(values=self._state.recent_folders)
 
-        mode = "playlist" if playlist else "video"
+        mode = t("log.download_mode_playlist") if playlist else t("log.download_mode_video")
         section_info = ""
         if download_section:
             s = section_start or "0:00"
             e = section_end or "end"
-            section_info = f", section {s}-{e}"
+            section_info = t("log.section_info", start=s, end=e)
         format_display = custom_format_str if self._custom_format_enabled else format_key
 
         pp_parts: list[str] = []
         convert_val = self._convert_var.get()
         if convert_val != "None":
-            pp_parts.append(f"convert→{convert_val}")
+            pp_parts.append(t("log.pp_convert", fmt=convert_val))
         sub_val = self._subtitle_mode_var.get()
         if sub_val != "None":
-            pp_parts.append("embed subs" if sub_val == "Embed" else "subs as file")
+            pp_parts.append(t("log.pp_embed_subs") if sub_val == "Embed" else t("log.pp_subs_file"))
         if self._burn_sub_var.get():
-            pp_parts.append("burn subs")
+            pp_parts.append(t("log.pp_burn_subs"))
         pp_info = f" [{', '.join(pp_parts)}]" if pp_parts else ""
 
-        self._log(f"Starting download ({len(urls)} URL(s), {mode} mode{section_info}): {format_display}{pp_info}...")
-        self._tray.update_tooltip(f"Downloading 0/{len(urls)}")
+        selected_chapters = self._get_selected_chapters()
+        selected_subtitle_langs = self._get_selected_subtitle_langs()
+
+        self._log(t("log.starting_download", count=len(urls), mode=mode, section=section_info, format=format_display, pp=pp_info))
+        if selected_chapters:
+            self._log(t("log.chapters_selected", count=len(selected_chapters)))
+        self._tray.update_tooltip(t("notify.downloading", done=0, total=len(urls)))
         self._progress_bar.set(0)
+        if selected_chapters:
+            self._progress_bar.configure(mode="indeterminate")
+            self._progress_bar.start()
+            self._progress_detail.configure(text=t("progress.downloading_chapters"))
         self._download_btn.configure(state="disabled")
         self._cancel_btn.configure(state="normal")
         self._open_folder_btn.configure(state="disabled")
@@ -1966,13 +2082,10 @@ class App(ctk.CTk):
         use_concurrent = max_concurrent > 1 and len(urls) > 1
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
-            self.after(0, lambda: self._item_finished(index, total, error))
+            self._call_on_main(lambda: self._item_finished(index, total, error))
 
         def on_done(error: str | None) -> None:
-            self.after(0, lambda: self._download_finished(error))
-
-        selected_chapters = self._get_selected_chapters()
-        selected_subtitle_langs = self._get_selected_subtitle_langs()
+            self._call_on_main(lambda: self._download_finished(error))
 
         common_kwargs: dict = dict(
             split_chapters=split_chapters,
@@ -1991,7 +2104,9 @@ class App(ctk.CTk):
             self._concurrent_mode = True
 
             def on_progress_concurrent(item_index: int, data: dict) -> None:
-                self.after(0, lambda idx=item_index, d=data: self._update_progress_concurrent(idx, d))
+                def _cb(idx: int = item_index, d: dict = data) -> None:
+                    self._update_progress_concurrent(idx, d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch_concurrent(
                 urls, format_key, self._output_dir,
@@ -2001,7 +2116,9 @@ class App(ctk.CTk):
             )
         else:
             def on_progress(data: dict) -> None:
-                self.after(0, lambda d=data: self._update_progress(d))
+                def _cb(d: dict = data) -> None:
+                    self._update_progress(d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch(
                 urls, format_key, self._output_dir,
@@ -2040,8 +2157,8 @@ class App(ctk.CTk):
 
         self._init_download_items(urls)
 
-        mode = "playlist" if playlist else "video"
-        self._log(f"Starting queued download ({len(urls)} URL(s), {mode} mode): {format_key}...")
+        mode = t("log.download_mode_playlist") if playlist else t("log.download_mode_video")
+        self._log(t("log.starting_queued", count=len(urls), mode=mode, format=format_key))
         self._progress_bar.set(0)
         self._download_btn.configure(state="disabled")
         self._cancel_btn.configure(state="normal")
@@ -2051,10 +2168,10 @@ class App(ctk.CTk):
         use_concurrent = max_concurrent > 1 and len(urls) > 1
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
-            self.after(0, lambda: self._item_finished(index, total, error))
+            self._call_on_main(lambda: self._item_finished(index, total, error))
 
         def on_done(error: str | None) -> None:
-            self.after(0, lambda: self._download_finished(error))
+            self._call_on_main(lambda: self._download_finished(error))
 
         common_kwargs: dict = dict(
             split_chapters=split_chapters,
@@ -2073,7 +2190,9 @@ class App(ctk.CTk):
             self._concurrent_mode = True
 
             def on_progress_concurrent(item_index: int, data: dict) -> None:
-                self.after(0, lambda idx=item_index, d=data: self._update_progress_concurrent(idx, d))
+                def _cb(idx: int = item_index, d: dict = data) -> None:
+                    self._update_progress_concurrent(idx, d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch_concurrent(
                 urls, format_key, output_dir,
@@ -2083,7 +2202,9 @@ class App(ctk.CTk):
             )
         else:
             def on_progress(data: dict) -> None:
-                self.after(0, lambda d=data: self._update_progress(d))
+                def _cb(d: dict = data) -> None:
+                    self._update_progress(d)
+                self._call_on_main(_cb)
 
             self._manager.download_batch(
                 urls, format_key, output_dir,
@@ -2097,12 +2218,19 @@ class App(ctk.CTk):
         self._persist_queue()
         self._update_queue_label()
         self._rebuild_queue_rows()
-        self._log("Cancelling...")
+        self._log(t("log.cancelling"))
 
     # ---------------------------------------------------------- Callbacks
 
     def _update_progress(self, data: dict) -> None:
         """Progress callback for sequential (non-concurrent) downloads."""
+        if data.get("status") == "postprocessing":
+            pp = data.get("postprocessor", "")
+            self._progress_detail.configure(
+                text=t("progress.postprocessing", postprocessor=pp) if pp else t("progress.processing")
+            )
+            return
+
         title = data.get("title")
         if title and title != self._video_title:
             self._video_title = title
@@ -2115,10 +2243,12 @@ class App(ctk.CTk):
 
         total = data["total_bytes"]
         downloaded = data["downloaded_bytes"]
+        is_indeterminate = str(self._progress_bar.cget("mode")) == "indeterminate"
 
         if total and total > 0:
             fraction = downloaded / total
-            self._progress_bar.set(fraction)
+            if not is_indeterminate:
+                self._progress_bar.set(fraction)
             pct = f"{fraction * 100:.1f}%"
         else:
             fraction = 0
@@ -2126,12 +2256,15 @@ class App(ctk.CTk):
 
         speed = format_speed(data["speed"])
         eta = format_eta(data["eta"])
-        self._progress_detail.configure(text=f"{pct} | {speed} | ETA {eta}")
+        self._progress_detail.configure(text=t("progress.detail", pct=pct, speed=speed, eta=eta))
 
         if data["status"] == "finished":
             self._accumulated_bytes += data["total_bytes"] or data["downloaded_bytes"]
+            if is_indeterminate:
+                self._progress_bar.stop()
+                self._progress_bar.configure(mode="determinate")
             self._progress_bar.set(1)
-            self._progress_detail.configure(text="100% | Processing...")
+            self._progress_detail.configure(text=t("progress.processing"))
             fraction = 1.0
 
         idx = self._current_item_index
@@ -2150,6 +2283,8 @@ class App(ctk.CTk):
     def _update_progress_concurrent(self, item_index: int, data: dict) -> None:
         """Progress callback for concurrent downloads -- routes by item index."""
         if item_index >= len(self._download_items):
+            return
+        if data.get("status") == "postprocessing":
             return
 
         item = self._download_items[item_index]
@@ -2206,7 +2341,7 @@ class App(ctk.CTk):
         pct = f"{aggregate * 100:.1f}%"
         speed = format_speed(latest_data.get("speed", 0))
         eta = format_eta(latest_data.get("eta", 0))
-        self._progress_detail.configure(text=f"{pct} | {speed} | ETA {eta}")
+        self._progress_detail.configure(text=t("progress.detail", pct=pct, speed=speed, eta=eta))
 
     def _item_finished(self, index: int, total: int, error: str | None) -> None:
         """Called when a single URL completes (index is 1-based from manager)."""
@@ -2229,18 +2364,18 @@ class App(ctk.CTk):
 
         if self._input_mode == "multiple":
             done_count = sum(1 for it in self._download_items if it["status"] in ("done", "failed"))
-            self._overall_label.configure(text=f"Overall: {done_count} of {self._total_items}")
-            self._tray.update_tooltip(f"Downloading {done_count}/{self._total_items}")
+            self._overall_label.configure(text=t("progress.overall", done=done_count, total=self._total_items))
+            self._tray.update_tooltip(t("notify.downloading", done=done_count, total=self._total_items))
 
         item_title = ""
         if item_idx < len(self._download_items):
             item_title = self._download_items[item_idx].get("title", "")
 
         if error:
-            self._log(f"[{index}/{total}] Error: {error}")
+            self._log(t("log.item_error", index=index, total=total, error=error))
             self._state.record_failed(title=item_title or self._video_title, url=url)
         else:
-            self._log(f"[{index}/{total}] Done")
+            self._log(t("log.item_done", index=index, total=total))
             if self._concurrent_mode:
                 bytes_dl = self._download_items[item_idx]["accumulated_bytes"] if item_idx < len(self._download_items) else 0
             else:
@@ -2257,22 +2392,24 @@ class App(ctk.CTk):
             self._refresh_status_bar()
 
     def _download_finished(self, error: str | None) -> None:
+        self._progress_bar.stop()
+        self._progress_bar.configure(mode="determinate")
         self._download_btn.configure(state="normal")
         self._cancel_btn.configure(state="disabled")
         self._open_folder_btn.configure(state="normal")
         if error:
-            self._log(f"Error: {error}")
-            send_notification("yt-dlp GUI", f"Download failed: {error}")
+            self._log(t("log.error", error=error))
+            send_notification(t("app.title"), t("notify.download_failed", error=error))
         else:
             self._progress_bar.set(1)
-            self._progress_detail.configure(text="100% | Done!")
-            self._log(f"All downloads complete! Saved to {self._output_dir}")
-            send_notification("yt-dlp GUI", "All downloads complete!")
+            self._progress_detail.configure(text=t("progress.done"))
+            self._log(t("log.all_complete", dir=self._output_dir))
+            send_notification(t("app.title"), t("notify.all_complete"))
 
             if self._input_mode == "multiple" and self._total_items > 0:
-                self._overall_label.configure(text=f"Overall: {self._total_items} of {self._total_items}")
+                self._overall_label.configure(text=t("progress.overall", done=self._total_items, total=self._total_items))
 
-        self._tray.update_tooltip("yt-dlp GUI")
+        self._tray.update_tooltip(t("tray.tooltip"))
         self._refresh_status_bar()
 
         self.after(100, self._process_queue)
