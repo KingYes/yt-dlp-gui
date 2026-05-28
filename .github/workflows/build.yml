@@ -53,6 +53,8 @@ jobs:
             --name "yt-dlp-gui" \
             --hidden-import customtkinter \
             --collect-data customtkinter \
+            --collect-all src \
+            --add-data "locales:locales" \
             main.py
 
       - name: Upload artifact

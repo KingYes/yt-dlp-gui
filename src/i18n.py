@@ -14,7 +14,7 @@ _LOCALES_DIR: Path
 if getattr(sys, "frozen", False):
     _LOCALES_DIR = Path(sys.executable).parent / "locales"
 else:
-    _LOCALES_DIR = Path(__file__).parent / "locales"
+    _LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
 
 _fallback: dict[str, str] = {}
 _strings: dict[str, str] = {}

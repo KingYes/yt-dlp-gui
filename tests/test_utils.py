@@ -1,6 +1,6 @@
 import pytest
 
-from utils import (
+from src.utils import (
     build_download_section_range,
     classify_url,
     format_bytes,
