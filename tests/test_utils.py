@@ -13,7 +13,6 @@ from utils import (
     validate_time_range,
 )
 
-
 # ────────────────────────────── is_valid_url ──────────────────────────────
 
 

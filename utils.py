@@ -5,8 +5,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
-
+from urllib.parse import parse_qs, urlparse
 
 _URL_PATTERN = re.compile(
     r"^https?://"
@@ -324,5 +323,5 @@ def _win_toast(title: str, message: str) -> None:
     )
     subprocess.Popen(
         ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps],
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0,
     )

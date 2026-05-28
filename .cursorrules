@@ -1,0 +1,16 @@
+When generating a Git commit message, follow this format exactly:
+
+Type: Subject
+
+Allowed types: Feature, CI, New, Tweak, Fix, Experiment, Deprecate, Deprecated, Revert, Internal
+Subject must start with an uppercase letter (sentence-case).
+Header must be at most 100 characters.
+Do not include a body or footer.
+Do not end the subject with a period.
+
+Examples:
+- Feature: Add playlist download support
+- Fix: Resolve crash when URL field is empty
+- Tweak: Improve progress bar responsiveness
+- CI: Add commit message linting workflow
+- Internal: Refactor download manager threading

@@ -1,5 +1,7 @@
+import contextlib
+from collections.abc import Callable
 from tkinter import filedialog
-from typing import Any, Callable
+from typing import Any
 
 import customtkinter as ctk
 
@@ -389,17 +391,15 @@ class SettingsWindow(ctk.CTkToplevel):
         On macOS, child widgets swallow scroll events, preventing the parent
         CTkScrollableFrame from scrolling when the pointer is over them.
         """
-        canvas = scroll_frame._parent_canvas  # noqa: SLF001
+        canvas = scroll_frame._parent_canvas
         binding_in_progress = False
 
         def _on_mousewheel(event: "Any") -> None:
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         def _bind_recursive(widget: "Any") -> None:
-            try:
+            with contextlib.suppress(NotImplementedError, AttributeError):
                 widget.bind("<MouseWheel>", _on_mousewheel, add="+")
-            except (NotImplementedError, AttributeError):
-                pass
             try:
                 children = widget.winfo_children()
             except Exception:

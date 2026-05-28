@@ -8,8 +8,8 @@ import tarfile
 import tempfile
 import threading
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import customtkinter as ctk
 import requests
@@ -78,10 +78,10 @@ def _extract_btbn_archive(archive_path: Path, dest_dir: Path) -> None:
 
     elif name.endswith(".tar.xz") or name.endswith(".tar.gz"):
         with tarfile.open(archive_path, "r:*") as tf:
-            for member in tf.getmembers():
-                basename = Path(member.name).name.lower()
-                if basename in ("ffmpeg", "ffprobe") and member.isfile():
-                    reader = tf.extractfile(member)
+            for tar_member in tf.getmembers():
+                basename = Path(tar_member.name).name.lower()
+                if basename in ("ffmpeg", "ffprobe") and tar_member.isfile():
+                    reader = tf.extractfile(tar_member)
                     if reader:
                         target = dest_dir / basename
                         with open(target, "wb") as dst:
@@ -249,11 +249,11 @@ class SetupWizard(ctk.CTkToplevel):
             self.after(0, self._on_success)
 
         except requests.RequestException as exc:
-            self.after(0, lambda: self._on_error(f"Download failed: {exc}"))
+            self.after(0, lambda e=exc: self._on_error(f"Download failed: {e}"))
         except (zipfile.BadZipFile, tarfile.TarError) as exc:
-            self.after(0, lambda: self._on_error(f"Extraction failed: {exc}"))
+            self.after(0, lambda e=exc: self._on_error(f"Extraction failed: {e}"))
         except OSError as exc:
-            self.after(0, lambda: self._on_error(f"File system error: {exc}"))
+            self.after(0, lambda e=exc: self._on_error(f"File system error: {e}"))
 
     def _suffix_for(self, url: str) -> str:
         if ".tar.xz" in url:

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -7,7 +8,7 @@ from state import AppState
 
 
 @pytest.fixture(autouse=True)
-def _isolate_state(tmp_path, monkeypatch):
+def _isolate_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     state_dir = tmp_path / "yt-dlp-gui"
     state_dir.mkdir()
     state_file = state_dir / "state.json"
@@ -144,7 +145,7 @@ class TestQueueReordering:
         assert queue[1]["urls"] == ["https://a"]
 
     def test_move_up_boundary(self) -> None:
-        queue = [_make_entry("https://a"), _make_entry("https://b")]
+        _make_entry("https://a"), _make_entry("https://b")
         index, direction = 0, -1
         new_index = index + direction
         assert new_index < 0  # should be rejected by the app

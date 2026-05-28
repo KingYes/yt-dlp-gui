@@ -78,7 +78,7 @@ jobs:
             LOG=$(git log --no-merges --format="%H %s" "${PREV}..${TAG}")
           fi
           BODY=$(echo "$LOG" \
-            | grep -v ' bump: v' \
+            | grep -v -E ' (bump: v|CI: |Internal: |Revert: )' \
             | while read -r hash msg; do
                 short=${hash:0:7}
                 msg=$(echo "$msg" | sed "s|(#\([0-9]*\))|[#\1](${REPO_URL}/pull/\1)|g")

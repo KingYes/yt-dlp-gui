@@ -1,6 +1,8 @@
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from download_manager import (
@@ -429,7 +431,7 @@ class TestDownloadOne:
                     mock_ydl._progress_hooks_ref = opts_dict["progress_hooks"]
                     mock_ydl_cls.return_value.__enter__.return_value._progress_hooks_ref = opts_dict["progress_hooks"]
 
-            def patched_download_one(idx: int, url: str, base: dict, pcb: object) -> object:
+            def patched_download_one(idx: int, url: str, base: dict[str, Any], pcb: Callable[..., Any]) -> None:
                 item_opts = dict(base)
                 item_opts["progress_hooks"] = [
                     lambda d, _idx=idx: dm._on_progress(d, lambda p: pcb(_idx, p))
@@ -439,8 +441,7 @@ class TestDownloadOne:
                 mock_ydl.download(["http://example.com"])
                 return None
 
-            result = patched_download_one(7, "http://example.com", base_opts, progress_cb)
-            assert result is None
+            patched_download_one(7, "http://example.com", base_opts, progress_cb)
             assert len(received) == 1
             assert received[0][0] == 7
 
@@ -558,7 +559,7 @@ class TestDownloadBatchConcurrent:
             _wait_for_thread(dm)
 
         assert len(done_errors) == 1
-        assert "already in progress" in done_errors[0]
+        assert done_errors[0] is not None and "already in progress" in done_errors[0]
 
     def test_cancel_stops_workers(self) -> None:
         dm = DownloadManager()
@@ -588,7 +589,7 @@ class TestDownloadBatchConcurrent:
             _wait_for_thread(dm)
 
         assert len(done_results) == 1
-        assert "cancelled" in done_results[0].lower()
+        assert done_results[0] is not None and "cancelled" in done_results[0].lower()
 
     def test_max_workers_capped_to_url_count(self) -> None:
         dm = DownloadManager()
@@ -597,7 +598,9 @@ class TestDownloadBatchConcurrent:
 
         def tracking_download(idx: int, url: str, base_opts: dict, pcb: object, **kwargs: object) -> None:
             with lock:
-                thread_ids.append(threading.current_thread().ident)
+                ident = threading.current_thread().ident
+                if ident is not None:
+                    thread_ids.append(ident)
             time.sleep(0.05)
             return None
 
