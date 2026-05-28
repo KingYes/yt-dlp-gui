@@ -67,6 +67,7 @@ _DEFAULT_STATE: dict[str, Any] = {
         "subtitle_mode": "",
         "subtitle_languages": "en",
         "subtitle_burn": False,
+        "language": "en",
     },
 }
 

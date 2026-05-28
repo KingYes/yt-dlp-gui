@@ -61,7 +61,7 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 
 ### Settings
 
-- **Appearance**: theme (System / Dark / Light), UI scale (80%–150%)
+- **Appearance**: theme (System / Dark / Light), UI scale (80%–150%), language selection (English, Hebrew — add more via JSON files)
 - **Download defaults**: speed limit, simultaneous downloads (1–5), embed thumbnail, embed metadata, subtitle languages, clipboard monitoring
 - **Network**: proxy support, browser cookies (Chrome, Firefox, Edge, Safari, Brave, Opera, Vivaldi), Netscape cookie file
 - **Advanced**: portable mode (config stored next to executable)
@@ -139,12 +139,14 @@ pytest
 main.py               Entry point
 app.py                Main application window and UI
 download_manager.py   yt-dlp wrapper with progress hooks, retry, and concurrent downloads
+i18n.py               Lightweight JSON-based internationalization module
 state.py              Persistent JSON state (stats, history, queue, settings)
 settings_window.py    Settings dialog UI
 setup_wizard.py       First-run FFmpeg download wizard
 tray.py               System tray icon (pystray)
 updater.py            Auto-update checker against GitHub releases
 utils.py              URL validation, format helpers, OS utilities
+locales/              Translation JSON files (en.json, he.json, ...)
 tests/                Unit tests (pytest)
 pyproject.toml        Ruff, mypy, and pytest configuration
 requirements.txt      Runtime dependencies

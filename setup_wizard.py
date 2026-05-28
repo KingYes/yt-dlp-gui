@@ -1,5 +1,7 @@
+import contextlib
 import os
 import platform
+import queue
 import shutil
 import stat
 import subprocess
@@ -14,6 +16,7 @@ from pathlib import Path
 import customtkinter as ctk
 import requests
 
+from i18n import t
 from state import AppState
 from utils import get_bin_dir
 
@@ -127,8 +130,9 @@ class SetupWizard(ctk.CTkToplevel):
         self._state = state
         self._on_complete = on_complete
         self._downloading = False
+        self._main_queue: queue.Queue[Callable[[], None]] = queue.Queue()
 
-        self.title("Setup Required")
+        self.title(t("wizard.title"))
         self.geometry("480x280")
         self.resizable(False, False)
         self.transient(master)
@@ -137,22 +141,19 @@ class SetupWizard(ctk.CTkToplevel):
         self.grid_columnconfigure(0, weight=1)
 
         self._build_ui()
+        self._drain_main_queue()
         self.protocol("WM_DELETE_WINDOW", self._on_skip)
 
     def _build_ui(self) -> None:
         ctk.CTkLabel(
             self,
-            text="FFmpeg Setup",
+            text=t("wizard.heading"),
             font=ctk.CTkFont(size=18, weight="bold"),
         ).grid(row=0, column=0, padx=24, pady=(24, 8))
 
         ctk.CTkLabel(
             self,
-            text=(
-                "FFmpeg is required for audio extraction, format merging,\n"
-                "and other post-processing features.\n\n"
-                "Click Install to download it automatically."
-            ),
+            text=t("wizard.description"),
             font=ctk.CTkFont(size=13),
             justify="center",
         ).grid(row=1, column=0, padx=24, pady=(0, 16))
@@ -171,16 +172,31 @@ class SetupWizard(ctk.CTkToplevel):
         btn_frame.grid(row=4, column=0, padx=24, pady=(0, 24))
 
         self._install_btn = ctk.CTkButton(
-            btn_frame, text="Install FFmpeg", width=140, command=self._start_install,
+            btn_frame, text=t("wizard.install"), width=140, command=self._start_install,
         )
         self._install_btn.grid(row=0, column=0, padx=(0, 12))
 
         self._skip_btn = ctk.CTkButton(
-            btn_frame, text="Skip", width=80,
+            btn_frame, text=t("wizard.skip"), width=80,
             fg_color="transparent", border_width=1, text_color=("gray30", "gray70"),
             command=self._on_skip,
         )
         self._skip_btn.grid(row=0, column=1)
+
+    def _call_on_main(self, func: Callable[[], None]) -> None:
+        """Schedule *func* to run on the main thread (thread-safe)."""
+        self._main_queue.put(func)
+
+    def _drain_main_queue(self) -> None:
+        """Process pending callbacks from background threads (runs on main thread)."""
+        while True:
+            try:
+                func = self._main_queue.get_nowait()
+            except queue.Empty:
+                break
+            with contextlib.suppress(Exception):
+                func()
+        self.after(16, self._drain_main_queue)
 
     def _start_install(self) -> None:
         if self._downloading:
@@ -189,14 +205,14 @@ class SetupWizard(ctk.CTkToplevel):
         self._install_btn.configure(state="disabled")
         self._skip_btn.configure(state="disabled")
         self._progress.grid()
-        self._set_status("Preparing download...")
+        self._set_status(t("wizard.preparing"))
 
         threading.Thread(target=self._download_worker, daemon=True).start()
 
     def _download_worker(self) -> None:
         urls = get_download_urls()
         if not urls:
-            self.after(0, lambda: self._on_error("No FFmpeg download available for this platform."))
+            self._call_on_main(lambda: self._on_error(t("wizard.error_no_platform")))
             return
 
         bin_dir = get_bin_dir()
@@ -205,7 +221,7 @@ class SetupWizard(ctk.CTkToplevel):
 
         try:
             for i, url in enumerate(urls):
-                self.after(0, lambda u=url: self._set_status(f"Downloading: {Path(u).name or 'ffmpeg'}..."))
+                self._call_on_main(lambda u=url: self._set_status(t("wizard.downloading", name=Path(u).name or "ffmpeg")))
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=self._suffix_for(url)) as tmp:
                     tmp_path = Path(tmp.name)
@@ -224,9 +240,9 @@ class SetupWizard(ctk.CTkToplevel):
                                 progress = downloaded / total
                                 if len(urls) > 1:
                                     progress = (i + progress) / len(urls)
-                                self.after(0, lambda p=progress: self._progress.set(p))
+                                self._call_on_main(lambda p=progress: self._progress.set(p))
 
-                    self.after(0, lambda: self._set_status("Extracting..."))
+                    self._call_on_main(lambda: self._set_status(t("wizard.extracting")))
 
                     if is_macos:
                         _extract_evermeet_zip(tmp_path, bin_dir)
@@ -236,24 +252,23 @@ class SetupWizard(ctk.CTkToplevel):
                     if tmp_path.exists():
                         tmp_path.unlink()
 
-            self.after(0, lambda: self._set_status("Verifying..."))
+            self._call_on_main(lambda: self._set_status(t("wizard.verifying")))
             if not _verify_ffmpeg(bin_dir):
-                self.after(0, lambda: self._on_error("Verification failed — FFmpeg binary may be corrupted."))
+                self._call_on_main(lambda: self._on_error(t("wizard.error_verification")))
                 return
 
-            # Persist the bin dir and update PATH
             ffmpeg_path = str(bin_dir)
             self._state.save_settings(ffmpeg_path=ffmpeg_path)
             os.environ["PATH"] = ffmpeg_path + os.pathsep + os.environ.get("PATH", "")
 
-            self.after(0, self._on_success)
+            self._call_on_main(self._on_success)
 
         except requests.RequestException as exc:
-            self.after(0, lambda e=exc: self._on_error(f"Download failed: {e}"))
+            self._call_on_main(lambda e=exc: self._on_error(t("wizard.error_download", error=e)))
         except (zipfile.BadZipFile, tarfile.TarError) as exc:
-            self.after(0, lambda e=exc: self._on_error(f"Extraction failed: {e}"))
+            self._call_on_main(lambda e=exc: self._on_error(t("wizard.error_extraction", error=e)))
         except OSError as exc:
-            self.after(0, lambda e=exc: self._on_error(f"File system error: {e}"))
+            self._call_on_main(lambda e=exc: self._on_error(t("wizard.error_filesystem", error=e)))
 
     def _suffix_for(self, url: str) -> str:
         if ".tar.xz" in url:
@@ -267,15 +282,15 @@ class SetupWizard(ctk.CTkToplevel):
 
     def _on_success(self) -> None:
         self._progress.set(1.0)
-        self._set_status("FFmpeg installed successfully!")
-        self._install_btn.configure(text="Done", state="normal", command=self._close_success)
+        self._set_status(t("wizard.success"))
+        self._install_btn.configure(text=t("wizard.done"), state="normal", command=self._close_success)
         self._skip_btn.grid_remove()
 
     def _on_error(self, message: str) -> None:
         self._downloading = False
         self._set_status(message)
         self._status_label.configure(text_color="red")
-        self._install_btn.configure(text="Retry", state="normal")
+        self._install_btn.configure(text=t("wizard.retry"), state="normal")
         self._skip_btn.configure(state="normal")
 
     def _close_success(self) -> None:

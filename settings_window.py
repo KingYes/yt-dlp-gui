@@ -5,6 +5,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from i18n import get_available_languages, is_rtl, t
 from state import AppState
 
 _BROWSERS = ["", "chrome", "firefox", "edge", "safari", "brave", "opera", "vivaldi"]
@@ -22,9 +23,10 @@ class SettingsWindow(ctk.CTkToplevel):
         state: AppState,
         on_theme_changed: Callable[[], None] | None = None,
         on_clipboard_changed: Callable[[bool], None] | None = None,
+        on_language_changed: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(parent)
-        self.title("Settings")
+        self.title(t("settings.title"))
         self.geometry("480x640")
         self.minsize(420, 540)
         self.resizable(True, True)
@@ -34,6 +36,7 @@ class SettingsWindow(ctk.CTkToplevel):
         self._state = state
         self._on_theme_changed = on_theme_changed
         self._on_clipboard_changed = on_clipboard_changed
+        self._on_language_changed = on_language_changed
         self._settings: dict[str, Any] = dict(state.settings)
 
         self._build_ui()
@@ -59,31 +62,52 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _build_appearance_section(self, parent: ctk.CTkFrame, start_row: int) -> int:
         row = start_row
+        s = "e" if is_rtl() else "w"
 
-        ctk.CTkLabel(parent, text="Appearance", font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=row, column=0, sticky="w", pady=(8, 12)
+        ctk.CTkLabel(parent, text=t("settings.appearance"), font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=row, column=0, sticky=s, pady=(8, 12)
         )
         row += 1
 
         # Theme
-        ctk.CTkLabel(parent, text="Theme:", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.theme"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
+        theme_labels = [t("settings.theme_system"), t("settings.theme_dark"), t("settings.theme_light")]
         current_theme = self._settings.get("theme", "system")
         theme_idx = _THEMES.index(current_theme) if current_theme in _THEMES else 0
-        self._theme_var = ctk.StringVar(value=_THEME_LABELS[theme_idx])
+        self._theme_var = ctk.StringVar(value=theme_labels[theme_idx])
         theme_menu = ctk.CTkSegmentedButton(
-            parent, values=_THEME_LABELS, variable=self._theme_var,
+            parent, values=theme_labels, variable=self._theme_var,
             command=self._on_theme_change,
         )
         theme_menu.grid(row=row, column=0, sticky="ew", pady=(0, 12))
         row += 1
 
+        # Language
+        ctk.CTkLabel(parent, text=t("settings.language"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
+        )
+        row += 1
+
+        available_langs = get_available_languages()
+        self._lang_codes = [code for code, _ in available_langs]
+        lang_labels = [name for _, name in available_langs]
+        current_lang = self._settings.get("language", "en")
+        current_lang_idx = self._lang_codes.index(current_lang) if current_lang in self._lang_codes else 0
+        self._lang_var = ctk.StringVar(value=lang_labels[current_lang_idx])
+        lang_menu = ctk.CTkOptionMenu(
+            parent, variable=self._lang_var, values=lang_labels,
+            command=self._on_language_change,
+        )
+        lang_menu.grid(row=row, column=0, sticky=s, pady=(0, 12))
+        row += 1
+
         # UI Scale
-        ctk.CTkLabel(parent, text="UI Scale:", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.ui_scale"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
@@ -116,19 +140,20 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _build_download_section(self, parent: ctk.CTkFrame, start_row: int) -> int:
         row = start_row
+        s = "e" if is_rtl() else "w"
 
-        ctk.CTkLabel(parent, text="Download Defaults", font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=row, column=0, sticky="w", pady=(8, 12)
+        ctk.CTkLabel(parent, text=t("settings.download_defaults"), font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=row, column=0, sticky=s, pady=(8, 12)
         )
         row += 1
 
         # Speed limit
-        ctk.CTkLabel(parent, text="Speed limit (e.g. 5M, 500K, empty = unlimited):", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.speed_limit"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
-        self._speed_entry = ctk.CTkEntry(parent, placeholder_text="unlimited")
+        self._speed_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.speed_limit_placeholder"))
         current_speed = self._settings.get("speed_limit", "")
         if current_speed:
             self._speed_entry.insert(0, current_speed)
@@ -138,8 +163,8 @@ class SettingsWindow(ctk.CTkToplevel):
         row += 1
 
         # Simultaneous downloads
-        ctk.CTkLabel(parent, text="Simultaneous downloads:", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.simultaneous"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
@@ -165,28 +190,28 @@ class SettingsWindow(ctk.CTkToplevel):
         # Embed thumbnail
         self._embed_thumb_var = ctk.BooleanVar(value=self._settings.get("embed_thumbnail", False))
         ctk.CTkCheckBox(
-            parent, text="Embed thumbnail in downloaded files",
+            parent, text=t("settings.embed_thumbnail"),
             variable=self._embed_thumb_var, font=ctk.CTkFont(size=13),
             command=lambda: self._save_bool("embed_thumbnail", self._embed_thumb_var),
-        ).grid(row=row, column=0, sticky="w", pady=(0, 6))
+        ).grid(row=row, column=0, sticky=s, pady=(0, 6))
         row += 1
 
         # Embed metadata
         self._embed_meta_var = ctk.BooleanVar(value=self._settings.get("embed_metadata", False))
         ctk.CTkCheckBox(
-            parent, text="Embed metadata (title, artist, etc.)",
+            parent, text=t("settings.embed_metadata"),
             variable=self._embed_meta_var, font=ctk.CTkFont(size=13),
             command=lambda: self._save_bool("embed_metadata", self._embed_meta_var),
-        ).grid(row=row, column=0, sticky="w", pady=(0, 6))
+        ).grid(row=row, column=0, sticky=s, pady=(0, 6))
         row += 1
 
         # Subtitle languages
-        ctk.CTkLabel(parent, text="Subtitle languages (e.g. en, es, all):", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(6, 4)
+        ctk.CTkLabel(parent, text=t("settings.subtitle_languages"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(6, 4)
         )
         row += 1
 
-        self._subtitle_lang_entry = ctk.CTkEntry(parent, placeholder_text="en")
+        self._subtitle_lang_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.subtitle_languages_placeholder"))
         current_langs = self._settings.get("subtitle_languages", "en")
         if current_langs:
             self._subtitle_lang_entry.insert(0, current_langs)
@@ -198,10 +223,10 @@ class SettingsWindow(ctk.CTkToplevel):
         # Clipboard monitoring
         self._clip_var = ctk.BooleanVar(value=self._settings.get("clipboard_monitor", False))
         ctk.CTkCheckBox(
-            parent, text="Clipboard monitoring (auto-add URLs)",
+            parent, text=t("settings.clipboard_monitor"),
             variable=self._clip_var, font=ctk.CTkFont(size=13),
             command=self._on_clipboard_toggle,
-        ).grid(row=row, column=0, sticky="w", pady=(0, 16))
+        ).grid(row=row, column=0, sticky=s, pady=(0, 16))
         row += 1
 
         sep = ctk.CTkFrame(parent, height=2, fg_color="gray70")
@@ -214,19 +239,20 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _build_network_section(self, parent: ctk.CTkFrame, start_row: int) -> int:
         row = start_row
+        s = "e" if is_rtl() else "w"
 
-        ctk.CTkLabel(parent, text="Network", font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=row, column=0, sticky="w", pady=(8, 12)
+        ctk.CTkLabel(parent, text=t("settings.network"), font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=row, column=0, sticky=s, pady=(8, 12)
         )
         row += 1
 
         # Proxy
-        ctk.CTkLabel(parent, text="Proxy (e.g. socks5://127.0.0.1:1080):", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.proxy"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
-        self._proxy_entry = ctk.CTkEntry(parent, placeholder_text="none")
+        self._proxy_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.proxy_placeholder"))
         current_proxy = self._settings.get("proxy", "")
         if current_proxy:
             self._proxy_entry.insert(0, current_proxy)
@@ -236,8 +262,8 @@ class SettingsWindow(ctk.CTkToplevel):
         row += 1
 
         # Browser cookies
-        ctk.CTkLabel(parent, text="Browser cookies:", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.browser_cookies"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
@@ -248,23 +274,19 @@ class SettingsWindow(ctk.CTkToplevel):
             parent, variable=self._browser_var, values=_BROWSER_LABELS,
             command=self._on_browser_change,
         )
-        browser_menu.grid(row=row, column=0, sticky="w", pady=(0, 2))
+        browser_menu.grid(row=row, column=0, sticky=s, pady=(0, 2))
         row += 1
 
         ctk.CTkLabel(
             parent,
-            text=(
-                "Reads cookies directly from your browser's profile.\n"
-                "Use this for age-restricted or members-only content.\n"
-                "The browser must be closed for this to work reliably."
-            ),
-            font=ctk.CTkFont(size=11), text_color="gray", justify="left",
-        ).grid(row=row, column=0, sticky="w", pady=(0, 12))
+            text=t("settings.browser_cookies_help"),
+            font=ctk.CTkFont(size=11), text_color="gray", justify="right" if is_rtl() else "left",
+        ).grid(row=row, column=0, sticky=s, pady=(0, 12))
         row += 1
 
         # Cookie file
-        ctk.CTkLabel(parent, text="Cookie file (Netscape format):", font=ctk.CTkFont(size=13)).grid(
-            row=row, column=0, sticky="w", pady=(0, 4)
+        ctk.CTkLabel(parent, text=t("settings.cookie_file"), font=ctk.CTkFont(size=13)).grid(
+            row=row, column=0, sticky=s, pady=(0, 4)
         )
         row += 1
 
@@ -272,7 +294,7 @@ class SettingsWindow(ctk.CTkToplevel):
         cookie_frame.grid(row=row, column=0, sticky="ew", pady=(0, 2))
         cookie_frame.grid_columnconfigure(0, weight=1)
 
-        self._cookie_entry = ctk.CTkEntry(cookie_frame, placeholder_text="no file selected")
+        self._cookie_entry = ctk.CTkEntry(cookie_frame, placeholder_text=t("settings.cookie_file_placeholder"))
         current_cookie = self._settings.get("cookie_file", "")
         if current_cookie:
             self._cookie_entry.insert(0, current_cookie)
@@ -280,20 +302,16 @@ class SettingsWindow(ctk.CTkToplevel):
         self._cookie_entry.bind("<FocusOut>", lambda _: self._save_text_field("cookie_file", self._cookie_entry))
 
         ctk.CTkButton(
-            cookie_frame, text="Browse...", width=80,
+            cookie_frame, text=t("settings.cookie_file_browse"), width=80,
             command=self._browse_cookie_file,
         ).grid(row=0, column=1, padx=(6, 0))
         row += 1
 
         ctk.CTkLabel(
             parent,
-            text=(
-                "Alternative to browser cookies. Export cookies as a\n"
-                "Netscape-format .txt file using a browser extension\n"
-                "like \"Get cookies.txt LOCALLY\" or \"EditThisCookie\"."
-            ),
-            font=ctk.CTkFont(size=11), text_color="gray", justify="left",
-        ).grid(row=row, column=0, sticky="w", pady=(0, 16))
+            text=t("settings.cookie_file_help"),
+            font=ctk.CTkFont(size=11), text_color="gray", justify="right" if is_rtl() else "left",
+        ).grid(row=row, column=0, sticky=s, pady=(0, 16))
         row += 1
 
         sep = ctk.CTkFrame(parent, height=2, fg_color="gray70")
@@ -306,25 +324,26 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _build_advanced_section(self, parent: ctk.CTkFrame, start_row: int) -> int:
         row = start_row
+        s = "e" if is_rtl() else "w"
 
-        ctk.CTkLabel(parent, text="Advanced", font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=row, column=0, sticky="w", pady=(8, 12)
+        ctk.CTkLabel(parent, text=t("settings.advanced"), font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=row, column=0, sticky=s, pady=(8, 12)
         )
         row += 1
 
         self._portable_var = ctk.BooleanVar(value=self._settings.get("portable_mode", False))
         ctk.CTkCheckBox(
-            parent, text="Portable mode (config next to executable)",
+            parent, text=t("settings.portable_mode"),
             variable=self._portable_var, font=ctk.CTkFont(size=13),
             command=self._on_portable_toggle,
-        ).grid(row=row, column=0, sticky="w", pady=(0, 6))
+        ).grid(row=row, column=0, sticky=s, pady=(0, 6))
         row += 1
 
         ctk.CTkLabel(
             parent,
-            text="When enabled, settings are stored next to the app instead of ~/.config/",
+            text=t("settings.portable_help"),
             font=ctk.CTkFont(size=11), text_color="gray",
-        ).grid(row=row, column=0, sticky="w", pady=(0, 16))
+        ).grid(row=row, column=0, sticky=s, pady=(0, 16))
         row += 1
 
         return row
@@ -332,7 +351,8 @@ class SettingsWindow(ctk.CTkToplevel):
     # ----------------------------------------------------------- Callbacks
 
     def _on_theme_change(self, label: str) -> None:
-        idx = _THEME_LABELS.index(label) if label in _THEME_LABELS else 0
+        theme_labels = [t("settings.theme_system"), t("settings.theme_dark"), t("settings.theme_light")]
+        idx = theme_labels.index(label) if label in theme_labels else 0
         theme = _THEMES[idx]
         ctk.set_appearance_mode(theme)
         self._state.save_settings(theme=theme)
@@ -361,6 +381,16 @@ class SettingsWindow(ctk.CTkToplevel):
         browser = _BROWSERS[idx]
         self._state.save_settings(browser_cookies=browser)
 
+    def _on_language_change(self, label: str) -> None:
+        available = get_available_languages()
+        lang_names = [name for _, name in available]
+        idx = lang_names.index(label) if label in lang_names else 0
+        code = available[idx][0]
+        self._state.save_settings(language=code)
+        if self._on_language_changed:
+            self.destroy()
+            self._on_language_changed(code)
+
     def _on_portable_toggle(self) -> None:
         enabled = self._portable_var.get()
         if enabled:
@@ -370,8 +400,8 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _browse_cookie_file(self) -> None:
         path = filedialog.askopenfilename(
-            title="Select cookie file",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title=t("settings.cookie_file_dialog_title"),
+            filetypes=[(t("settings.cookie_file_dialog_text"), "*.txt"), (t("settings.cookie_file_dialog_all"), "*.*")],
         )
         if path:
             self._cookie_entry.delete(0, "end")

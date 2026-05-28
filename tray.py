@@ -7,6 +7,8 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+from i18n import t
+
 try:
     import pystray
 
@@ -35,7 +37,14 @@ def _create_icon_image(size: int = 64) -> Image.Image:
 
 
 class TrayManager:
-    """Cross-platform system tray icon using pystray."""
+    """Cross-platform system tray icon using pystray.
+
+    pystray callbacks run on a background thread.  On macOS with recent
+    Python / Tk builds, **any** Tkinter call (including ``widget.after()``)
+    from a non-main thread triggers a fatal ``EXC_BREAKPOINT``.  We avoid
+    this by setting ``threading.Event`` flags from the callbacks and letting
+    the owner poll them with a Tk ``after`` timer on the main thread.
+    """
 
     def __init__(
         self,
@@ -46,7 +55,9 @@ class TrayManager:
         self._on_quit = on_quit
         self._icon: Any = None
         self._thread: threading.Thread | None = None
-        self._tooltip = "yt-dlp GUI"
+        self._tooltip = t("tray.tooltip")
+        self._show_event = threading.Event()
+        self._quit_event = threading.Event()
 
     @property
     def available(self) -> bool:
@@ -57,9 +68,9 @@ class TrayManager:
             return
 
         menu = pystray.Menu(
-            pystray.MenuItem("Show Window", self._show_action, default=True),
+            pystray.MenuItem(t("tray.show_window"), self._show_action, default=True),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", self._quit_action),
+            pystray.MenuItem(t("tray.quit"), self._quit_action),
         )
 
         self._icon = pystray.Icon(
@@ -73,11 +84,26 @@ class TrayManager:
         self._thread.start()
 
     def stop(self) -> None:
-        if self._icon is not None:
-            with contextlib.suppress(Exception):
-                self._icon.stop()
-            self._icon = None
-            self._thread = None
+        """Mark the tray as stopped.
+
+        On macOS, ``pystray.Icon.stop()`` tears down the ``NSStatusItem``
+        via AppKit calls that must run on the AppKit thread.  Calling it
+        from the main (Tk) thread crashes with ``EXC_BREAKPOINT``.  Since
+        the tray thread is a daemon thread it will be cleaned up
+        automatically when the process exits, so we simply drop our
+        reference.
+        """
+        self._icon = None
+        self._thread = None
+
+    def poll_events(self) -> None:
+        """Check pending tray events. Must be called from the main thread."""
+        if self._show_event.is_set():
+            self._show_event.clear()
+            self._on_show()
+        if self._quit_event.is_set():
+            self._quit_event.clear()
+            self._on_quit()
 
     def update_tooltip(self, text: str) -> None:
         self._tooltip = text
@@ -90,7 +116,7 @@ class TrayManager:
                 self._icon.notify(message, title)
 
     def _show_action(self, icon: object, item: object) -> None:
-        self._on_show()
+        self._show_event.set()
 
     def _quit_action(self, icon: object, item: object) -> None:
-        self._on_quit()
+        self._quit_event.set()
