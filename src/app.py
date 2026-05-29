@@ -16,8 +16,8 @@ from .clipboard_dnd import ClipboardDndController
 from .download_handler import DownloadHandler
 from .download_manager import DownloadManager
 from .format_parser import FORMAT_PRESETS
-from .i18n import is_rtl, load_language, t
-from .layout_utils import _anchor_start, _c, _pad_end, _sticky_end, _sticky_start
+from .i18n import load_language, t
+from .layout_utils import _anchor_start, _c, _pad_end, _padx, _sticky_end, _sticky_start
 from .metadata_pickers import MetadataPickerController
 from .queue_controller import QueueController
 from .settings_window import SettingsWindow
@@ -254,7 +254,7 @@ class App(ctk.CTk):
         frame.grid_columnconfigure(_c(1, 2), weight=1)
 
         ctk.CTkLabel(frame, text=t("output.label"), font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=0, column=_c(0, 2), padx=(12, 6) if not is_rtl() else (6, 12), pady=12
+            row=0, column=_c(0, 2), padx=_padx(12, 6), pady=12
         )
 
         recent = self._state.recent_folders or [self._output_dir]
@@ -408,7 +408,7 @@ class App(ctk.CTk):
 
     def _update_section_visibility(self) -> None:
         if self._input_mode == "single":
-            self._fmt.section_checkbox.grid(row=0, column=_c(1, 3), padx=(0, 8))
+            self._fmt.section_checkbox.grid(row=0, column=_c(1, 3), padx=_padx(0, 8))
             if self._fmt.section_var.get():
                 self._fmt.section_frame.grid(row=1, column=0, columnspan=4, pady=(6, 0), sticky="ew")
         else:

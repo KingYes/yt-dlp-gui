@@ -7,7 +7,7 @@ from collections.abc import Callable
 import customtkinter as ctk
 
 from ..i18n import t
-from ..layout_utils import _anchor_start, _c, _pad_end, _sticky_end, _sticky_start
+from ..layout_utils import _anchor_start, _c, _pad_end, _padx, _sticky_end, _sticky_start
 from ..utils import truncate_filename
 
 
@@ -105,7 +105,7 @@ class ProgressPanel(ctk.CTkFrame):
             self.rebuild_detail_rows()
 
     def show_toggle(self) -> None:
-        self.progress_view_toggle.grid(row=0, column=_c(2, 3), padx=(8, 0))
+        self.progress_view_toggle.grid(row=0, column=_c(2, 3), padx=_padx(8, 0))
 
     def hide_toggle(self) -> None:
         self.progress_view_toggle.grid_forget()
@@ -132,17 +132,17 @@ class ProgressPanel(ctk.CTkFrame):
                 row_frame, text=display, anchor=_anchor_start(),
                 font=ctk.CTkFont(size=12),
             )
-            title_label.grid(row=0, column=_c(1, 4), sticky="ew", padx=(0, 4))
+            title_label.grid(row=0, column=_c(1, 4), sticky="ew", padx=_padx(0, 4))
 
             bar = ctk.CTkProgressBar(row_frame, width=120, height=12)
-            bar.grid(row=0, column=_c(2, 4), padx=(0, 4))
+            bar.grid(row=0, column=_c(2, 4), padx=_padx(0, 4))
             bar.set(item["progress"])
 
             info_label = ctk.CTkLabel(
                 row_frame, text=_status_text(item), anchor=_sticky_end(),
                 font=ctk.CTkFont(size=11), width=60,
             )
-            info_label.grid(row=0, column=_c(3, 4), padx=(0, 4))
+            info_label.grid(row=0, column=_c(3, 4), padx=_padx(0, 4))
 
             retry_btn = ctk.CTkButton(
                 row_frame, text=t("progress.retry"), width=50, height=22,
@@ -151,7 +151,7 @@ class ProgressPanel(ctk.CTkFrame):
                 command=lambda idx=i: self._on_retry_item(idx),
             )
             if item["status"] == "failed":
-                retry_btn.grid(row=0, column=_c(4, 4), padx=(0, 4))
+                retry_btn.grid(row=0, column=_c(4, 4), padx=_padx(0, 4))
 
             self._detail_rows.append({
                 "frame": row_frame,
@@ -175,7 +175,7 @@ class ProgressPanel(ctk.CTkFrame):
         row["info_label"].configure(text=_status_text(item))
 
         if item["status"] == "failed":
-            row["retry_btn"].grid(row=0, column=_c(4, 4), padx=(0, 4))
+            row["retry_btn"].grid(row=0, column=_c(4, 4), padx=_padx(0, 4))
         else:
             row["retry_btn"].grid_forget()
 

@@ -9,7 +9,7 @@ import customtkinter as ctk
 
 from ..format_parser import FORMAT_PRESETS
 from ..i18n import t
-from ..layout_utils import _anchor_start, _c, _pad_end, _pad_start, _sticky_end, _sticky_start
+from ..layout_utils import _anchor_start, _c, _justify, _pad_end, _pad_start, _padx, _sticky_end, _sticky_start
 
 
 class FormatFrame(ctk.CTkFrame):
@@ -47,7 +47,7 @@ class FormatFrame(ctk.CTkFrame):
             fg_color="#28a745", hover_color="#218838",
             command=on_download,
         )
-        self.download_btn.grid(row=0, column=_c(2, 3), padx=(4, 6), pady=(12, 4))
+        self.download_btn.grid(row=0, column=_c(2, 3), padx=_padx(4, 6), pady=(12, 4))
 
         self.cancel_btn = ctk.CTkButton(
             self, text=t("format.cancel"), width=80,
@@ -69,31 +69,31 @@ class FormatFrame(ctk.CTkFrame):
 
         ctk.CTkLabel(
             self.custom_format_frame, text=t("format.video"), font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=_c(0, 4), padx=(0, 4))
+        ).grid(row=0, column=_c(0, 4), padx=_padx(0, 4))
 
         self.video_format_var = ctk.StringVar(value="")
         self.video_format_menu = ctk.CTkOptionMenu(
             self.custom_format_frame, variable=self.video_format_var,
             values=[t("format.preview_first")], width=260, state="disabled",
         )
-        self.video_format_menu.grid(row=0, column=_c(1, 4), padx=(0, 12))
+        self.video_format_menu.grid(row=0, column=_c(1, 4), padx=_padx(0, 12))
 
         ctk.CTkLabel(
             self.custom_format_frame, text=t("format.audio"), font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=_c(2, 4), padx=(0, 4))
+        ).grid(row=0, column=_c(2, 4), padx=_padx(0, 4))
 
         self.audio_format_var = ctk.StringVar(value="")
         self.audio_format_menu = ctk.CTkOptionMenu(
             self.custom_format_frame, variable=self.audio_format_var,
             values=[t("format.preview_first")], width=200, state="disabled",
         )
-        self.audio_format_menu.grid(row=0, column=_c(3, 4), padx=(0, 8))
+        self.audio_format_menu.grid(row=0, column=_c(3, 4), padx=_padx(0, 8))
 
         self.format_status_label = ctk.CTkLabel(
             self.custom_format_frame, text="", font=ctk.CTkFont(size=11),
             text_color="gray", anchor=_anchor_start(),
         )
-        self.format_status_label.grid(row=0, column=_c(4, 4), padx=(4, 0), sticky=_sticky_start())
+        self.format_status_label.grid(row=0, column=_c(4, 4), padx=_padx(4, 0), sticky=_sticky_start())
 
         # Options row
         opts = ctk.CTkFrame(self, fg_color="transparent")
@@ -129,23 +129,25 @@ class FormatFrame(ctk.CTkFrame):
 
         ctk.CTkLabel(
             self.section_frame, text=t("format.section_start"), font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=_c(0, 4), padx=(0, 4))
+        ).grid(row=0, column=_c(0, 4), padx=_padx(0, 4))
 
         self.section_start_entry = ctk.CTkEntry(
             self.section_frame, width=90, font=ctk.CTkFont(size=12),
             placeholder_text=t("format.section_start_placeholder"),
+            justify=_justify(),
         )
-        self.section_start_entry.grid(row=0, column=_c(1, 4), padx=(0, 12))
+        self.section_start_entry.grid(row=0, column=_c(1, 4), padx=_padx(0, 12))
 
         ctk.CTkLabel(
             self.section_frame, text=t("format.section_end"), font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=_c(2, 4), padx=(0, 4))
+        ).grid(row=0, column=_c(2, 4), padx=_padx(0, 4))
 
         self.section_end_entry = ctk.CTkEntry(
             self.section_frame, width=90, font=ctk.CTkFont(size=12),
             placeholder_text=t("format.section_end_placeholder"),
+            justify=_justify(),
         )
-        self.section_end_entry.grid(row=0, column=_c(3, 4), padx=(0, 12))
+        self.section_end_entry.grid(row=0, column=_c(3, 4), padx=_padx(0, 12))
 
         self.section_error_label = ctk.CTkLabel(
             self.section_frame, text="", font=ctk.CTkFont(size=11),
@@ -158,7 +160,7 @@ class FormatFrame(ctk.CTkFrame):
         pp_frame.grid(row=4, column=0, columnspan=4, padx=12, pady=(0, 10), sticky="ew")
 
         ctk.CTkLabel(pp_frame, text=t("format.convert"), font=ctk.CTkFont(size=12)).grid(
-            row=0, column=_c(0, 4), padx=(0, 4)
+            row=0, column=_c(0, 4), padx=_padx(0, 4)
         )
 
         convert_values = ["None", "MP4", "MKV", "WebM", "MP3", "AAC", "FLAC", "WAV", "OGG"]
@@ -171,10 +173,10 @@ class FormatFrame(ctk.CTkFrame):
             pp_frame, variable=self.convert_var, values=convert_values,
             width=90, command=on_convert_changed,
         )
-        self.convert_menu.grid(row=0, column=_c(1, 4), padx=(0, 16))
+        self.convert_menu.grid(row=0, column=_c(1, 4), padx=_padx(0, 16))
 
         ctk.CTkLabel(pp_frame, text=t("format.subs"), font=ctk.CTkFont(size=12)).grid(
-            row=0, column=_c(2, 4), padx=(0, 4)
+            row=0, column=_c(2, 4), padx=_padx(0, 4)
         )
 
         sub_values = ["None", "Embed", "File"]
@@ -185,14 +187,14 @@ class FormatFrame(ctk.CTkFrame):
             pp_frame, variable=self.subtitle_mode_var, values=sub_values,
             width=90, command=on_subtitle_mode_changed,
         )
-        self.subtitle_mode_menu.grid(row=0, column=_c(3, 4), padx=(0, 8))
+        self.subtitle_mode_menu.grid(row=0, column=_c(3, 4), padx=_padx(0, 8))
 
         self.burn_sub_var = ctk.BooleanVar(value=settings.get("subtitle_burn", False))
         self._burn_sub_checkbox = ctk.CTkCheckBox(
             pp_frame, text=t("format.burn_subs"), variable=self.burn_sub_var,
             font=ctk.CTkFont(size=12), command=on_burn_sub_changed,
         )
-        self._burn_sub_checkbox.grid(row=0, column=_c(4, 4), padx=(0, 8))
+        self._burn_sub_checkbox.grid(row=0, column=_c(4, 4), padx=_padx(0, 8))
 
         # Subtitle summary row
         self.subtitle_summary_frame = ctk.CTkFrame(self, fg_color="transparent")
