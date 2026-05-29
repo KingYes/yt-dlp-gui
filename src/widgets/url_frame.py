@@ -9,7 +9,7 @@ from collections.abc import Callable
 import customtkinter as ctk
 
 from ..i18n import t
-from ..layout_utils import _anchor_start, _c, _pad_end, _pad_start, _sticky_start
+from ..layout_utils import _anchor_start, _c, _justify, _pad_end, _pad_start, _padx, _sticky_start
 
 _MACOS = sys.platform == "darwin"
 
@@ -46,14 +46,17 @@ class UrlFrame(ctk.CTkFrame):
             header, values=[t("url.mode_single"), t("url.mode_multiple")], variable=self._mode_var,
             command=on_mode_toggle, width=160,
         )
-        self._mode_toggle.grid(row=0, column=_c(1, 2), padx=(8, 0), sticky=_sticky_start())
+        self._mode_toggle.grid(row=0, column=_c(1, 2), padx=_padx(8, 0), sticky=_sticky_start())
 
         self._settings_btn = ctk.CTkButton(
             header, text=t("url.settings"), width=80, command=on_settings,
         )
         self._settings_btn.grid(row=0, column=_c(2, 2), padx=_pad_end(0, 4))
 
-        self.url_entry = ctk.CTkEntry(self, font=ctk.CTkFont(size=13), placeholder_text=t("url.placeholder"))
+        self.url_entry = ctk.CTkEntry(
+            self, font=ctk.CTkFont(size=13), placeholder_text=t("url.placeholder"),
+            justify=_justify(),
+        )
         self.url_entry.bind("<Return>", lambda _: on_download())
         self._url_debounce_id: str | None = None
         self.url_entry.bind("<KeyRelease>", lambda _: self._debounce_url_changed())
@@ -91,7 +94,7 @@ class UrlFrame(ctk.CTkFrame):
             actions, text="", anchor=_anchor_start(), font=ctk.CTkFont(size=12),
             wraplength=400,
         )
-        self.preview_label.grid(row=0, column=_c(2, 2), padx=(8, 0), sticky="ew")
+        self.preview_label.grid(row=0, column=_c(2, 2), padx=_padx(8, 0), sticky="ew")
 
     @property
     def mode_var(self) -> ctk.StringVar:

@@ -31,3 +31,13 @@ def _pad_end(outer: int = 0, inner: int = 0) -> tuple[int, int]:
 def _c(col: int, max_col: int) -> int:
     """Mirror a grid column index for RTL layouts."""
     return max_col - col if is_rtl() else col
+
+
+def _justify() -> str:
+    """Return 'right' for RTL languages, 'left' for LTR."""
+    return "right" if is_rtl() else "left"
+
+
+def _padx(start: int, end: int) -> tuple[int, int]:
+    """Return ``(left, right)`` padding, swapping for RTL."""
+    return (end, start) if is_rtl() else (start, end)

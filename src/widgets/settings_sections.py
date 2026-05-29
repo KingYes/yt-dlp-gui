@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import customtkinter as ctk
 
-from ..i18n import get_available_languages, is_rtl, t
+from ..i18n import get_available_languages, t
+from ..layout_utils import _justify, _padx, _sticky_start
 
 if TYPE_CHECKING:
     from ..settings_window import SettingsWindow
@@ -21,7 +22,7 @@ _THEME_LABELS = ["System", "Dark", "Light"]
 
 def build_appearance_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: int) -> int:
     row = start_row
-    s = "e" if is_rtl() else "w"
+    s = _sticky_start()
 
     ctk.CTkLabel(parent, text=t("settings.appearance"), font=ctk.CTkFont(size=16, weight="bold")).grid(
         row=row, column=0, sticky=s, pady=(8, 12)
@@ -77,7 +78,7 @@ def build_appearance_section(win: SettingsWindow, parent: ctk.CTkFrame, start_ro
         scale_frame, text=f"{int(current_scale * 100)}%", font=ctk.CTkFont(size=12),
         width=45,
     )
-    win._scale_label.grid(row=0, column=1, padx=(8, 0))
+    win._scale_label.grid(row=0, column=1, padx=_padx(8, 0))
 
     scale_slider = ctk.CTkSlider(
         scale_frame, from_=0.8, to=1.5, number_of_steps=14,
@@ -95,7 +96,7 @@ def build_appearance_section(win: SettingsWindow, parent: ctk.CTkFrame, start_ro
 
 def build_download_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: int) -> int:
     row = start_row
-    s = "e" if is_rtl() else "w"
+    s = _sticky_start()
 
     ctk.CTkLabel(parent, text=t("settings.download_defaults"), font=ctk.CTkFont(size=16, weight="bold")).grid(
         row=row, column=0, sticky=s, pady=(8, 12)
@@ -107,7 +108,7 @@ def build_download_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row:
     )
     row += 1
 
-    win._speed_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.speed_limit_placeholder"))
+    win._speed_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.speed_limit_placeholder"), justify=_justify())
     current_speed = win._settings.get("speed_limit", "")
     if current_speed:
         win._speed_entry.insert(0, current_speed)
@@ -137,7 +138,9 @@ def build_download_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row:
     )
     row += 1
 
-    win._subtitle_lang_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.subtitle_languages_placeholder"))
+    win._subtitle_lang_entry = ctk.CTkEntry(
+        parent, placeholder_text=t("settings.subtitle_languages_placeholder"), justify=_justify(),
+    )
     current_langs = win._settings.get("subtitle_languages", "en")
     if current_langs:
         win._subtitle_lang_entry.insert(0, current_langs)
@@ -163,7 +166,7 @@ def build_download_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row:
 
 def build_network_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: int) -> int:
     row = start_row
-    s = "e" if is_rtl() else "w"
+    s = _sticky_start()
 
     ctk.CTkLabel(parent, text=t("settings.network"), font=ctk.CTkFont(size=16, weight="bold")).grid(
         row=row, column=0, sticky=s, pady=(8, 12)
@@ -175,7 +178,7 @@ def build_network_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: 
     )
     row += 1
 
-    win._proxy_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.proxy_placeholder"))
+    win._proxy_entry = ctk.CTkEntry(parent, placeholder_text=t("settings.proxy_placeholder"), justify=_justify())
     current_proxy = win._settings.get("proxy", "")
     if current_proxy:
         win._proxy_entry.insert(0, current_proxy)
@@ -202,7 +205,7 @@ def build_network_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: 
     ctk.CTkLabel(
         parent,
         text=t("settings.browser_cookies_help"),
-        font=ctk.CTkFont(size=11), text_color="gray", justify="right" if is_rtl() else "left",
+        font=ctk.CTkFont(size=11), text_color="gray", justify=_justify(),
     ).grid(row=row, column=0, sticky=s, pady=(0, 12))
     row += 1
 
@@ -215,7 +218,9 @@ def build_network_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: 
     cookie_frame.grid(row=row, column=0, sticky="ew", pady=(0, 2))
     cookie_frame.grid_columnconfigure(0, weight=1)
 
-    win._cookie_entry = ctk.CTkEntry(cookie_frame, placeholder_text=t("settings.cookie_file_placeholder"))
+    win._cookie_entry = ctk.CTkEntry(
+        cookie_frame, placeholder_text=t("settings.cookie_file_placeholder"), justify=_justify(),
+    )
     current_cookie = win._settings.get("cookie_file", "")
     if current_cookie:
         win._cookie_entry.insert(0, current_cookie)
@@ -225,13 +230,13 @@ def build_network_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: 
     ctk.CTkButton(
         cookie_frame, text=t("settings.cookie_file_browse"), width=80,
         command=win._browse_cookie_file,
-    ).grid(row=0, column=1, padx=(6, 0))
+    ).grid(row=0, column=1, padx=_padx(6, 0))
     row += 1
 
     ctk.CTkLabel(
         parent,
         text=t("settings.cookie_file_help"),
-        font=ctk.CTkFont(size=11), text_color="gray", justify="right" if is_rtl() else "left",
+        font=ctk.CTkFont(size=11), text_color="gray", justify=_justify(),
     ).grid(row=row, column=0, sticky=s, pady=(0, 16))
     row += 1
 
@@ -244,7 +249,7 @@ def build_network_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: 
 
 def build_advanced_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row: int) -> int:
     row = start_row
-    s = "e" if is_rtl() else "w"
+    s = _sticky_start()
 
     ctk.CTkLabel(parent, text=t("settings.advanced"), font=ctk.CTkFont(size=16, weight="bold")).grid(
         row=row, column=0, sticky=s, pady=(8, 12)
@@ -262,7 +267,7 @@ def build_advanced_section(win: SettingsWindow, parent: ctk.CTkFrame, start_row:
     ctk.CTkLabel(
         parent,
         text=t("settings.portable_help"),
-        font=ctk.CTkFont(size=11), text_color="gray",
+        font=ctk.CTkFont(size=11), text_color="gray", justify=_justify(),
     ).grid(row=row, column=0, sticky=s, pady=(0, 16))
     row += 1
 

@@ -7,7 +7,7 @@ from collections.abc import Callable
 import customtkinter as ctk
 
 from ..i18n import t
-from ..layout_utils import _anchor_start, _c, _sticky_start
+from ..layout_utils import _anchor_start, _c, _padx, _sticky_start
 from ..utils import truncate_filename
 
 
@@ -76,8 +76,8 @@ class QueuePanel(ctk.CTkFrame):
 
         self.empty_label.grid_forget()
         self.header_label.configure(text=t("queue.title_count", count=len(queue)))
-        self.clear_btn.grid(row=0, column=_c(1, 2), padx=(4, 0))
-        self.start_btn.grid(row=0, column=_c(2, 2), padx=(4, 0))
+        self.clear_btn.grid(row=0, column=_c(1, 2), padx=_padx(4, 0))
+        self.start_btn.grid(row=0, column=_c(2, 2), padx=_padx(4, 0))
         self._scroll.grid(row=1, column=0, padx=12, pady=(0, 8), sticky="ew")
 
         for i, entry in enumerate(queue):
@@ -99,10 +99,10 @@ class QueuePanel(ctk.CTkFrame):
             title_label = ctk.CTkLabel(
                 row_frame, text=display, anchor=_anchor_start(), font=ctk.CTkFont(size=12),
             )
-            title_label.grid(row=0, column=_c(1, 2), sticky="ew", padx=(0, 4))
+            title_label.grid(row=0, column=_c(1, 2), sticky="ew", padx=_padx(0, 4))
 
             btn_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
-            btn_frame.grid(row=0, column=_c(2, 2), padx=(0, 4))
+            btn_frame.grid(row=0, column=_c(2, 2), padx=_padx(0, 4))
 
             up_btn = ctk.CTkButton(
                 btn_frame, text="\u25B2", width=28, height=22, font=ctk.CTkFont(size=10),
