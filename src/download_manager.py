@@ -8,13 +8,21 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import yt_dlp
-
 from .ffmpeg_utils import burn_subtitles_into_video, get_ffmpeg_location
 from .format_parser import _AUDIO_FORMATS, FORMAT_PRESETS
 from .utils import build_download_section_range, parse_rate_limit
 
 _MAX_RETRIES = 2
+
+_yt_dlp: Any = None
+
+
+def _get_yt_dlp() -> Any:
+    global _yt_dlp
+    if _yt_dlp is None:
+        import yt_dlp as _mod
+        _yt_dlp = _mod
+    return _yt_dlp
 
 
 class _FileProgressPoller:
@@ -166,13 +174,13 @@ class DownloadManager:
 
         section_range = build_download_section_range(section_start, section_end)
         if section_range:
-            ydl_opts["download_ranges"] = yt_dlp.utils.download_range_func(
+            ydl_opts["download_ranges"] = _get_yt_dlp().utils.download_range_func(
                 None, [section_range]
             )
             ydl_opts["force_keyframes_at_cuts"] = True
         elif selected_chapters:
             escaped = [re.escape(title) for title in selected_chapters]
-            ydl_opts["download_ranges"] = yt_dlp.utils.download_range_func(
+            ydl_opts["download_ranges"] = _get_yt_dlp().utils.download_range_func(
                 escaped, None
             )
 
@@ -292,7 +300,7 @@ class DownloadManager:
             if poller:
                 poller.start()
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                with _get_yt_dlp().YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
                 if self._cancel_event.is_set():
                     done_callback("Download cancelled.")
@@ -374,7 +382,7 @@ class DownloadManager:
                             done_callback("Download cancelled.")
                             return
                         try:
-                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            with _get_yt_dlp().YoutubeDL(ydl_opts) as ydl:
                                 ydl.download([url])
                             if self._cancel_event.is_set():
                                 done_callback("Download cancelled.")
@@ -418,7 +426,7 @@ class DownloadManager:
 
         def _worker() -> None:
             try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
+                with _get_yt_dlp().YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
                 callback(info, None)
             except Exception as exc:
@@ -458,7 +466,7 @@ class DownloadManager:
         finished_files: list[str] | None = None,
     ) -> None:
         if self._cancel_event.is_set():
-            raise yt_dlp.utils.DownloadError("Cancelled by user")
+            raise _get_yt_dlp().utils.DownloadError("Cancelled by user")
 
         status = data.get("status", "")
         filename = data.get("filename", "")

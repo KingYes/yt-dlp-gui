@@ -14,7 +14,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import customtkinter as ctk
-import requests
 
 from .i18n import t
 from .state import AppState
@@ -210,6 +209,8 @@ class SetupWizard(ctk.CTkToplevel):
         threading.Thread(target=self._download_worker, daemon=True).start()
 
     def _download_worker(self) -> None:
+        import requests
+
         urls = get_download_urls()
         if not urls:
             self._call_on_main(lambda: self._on_error(t("wizard.error_no_platform")))

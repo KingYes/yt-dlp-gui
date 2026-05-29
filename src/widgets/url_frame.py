@@ -55,11 +55,12 @@ class UrlFrame(ctk.CTkFrame):
 
         self.url_entry = ctk.CTkEntry(self, font=ctk.CTkFont(size=13), placeholder_text=t("url.placeholder"))
         self.url_entry.bind("<Return>", lambda _: on_download())
-        self.url_entry.bind("<KeyRelease>", lambda _: self.after(50, on_url_changed))
+        self._url_debounce_id: str | None = None
+        self.url_entry.bind("<KeyRelease>", lambda _: self._debounce_url_changed())
 
         self.url_textbox = ctk.CTkTextbox(self, height=80, font=ctk.CTkFont(size=13),
                                           undo=True, autoseparators=True, maxundo=-1)
-        self.url_textbox.bind("<KeyRelease>", lambda _: self.after(50, on_url_changed))
+        self.url_textbox.bind("<KeyRelease>", lambda _: self._debounce_url_changed())
 
         if _MACOS:
             self.url_textbox.bind("<Command-z>", self._on_undo)
@@ -122,3 +123,12 @@ class UrlFrame(ctk.CTkFrame):
         with contextlib.suppress(Exception):
             self.url_textbox.edit_redo()
         return "break"
+
+    def _debounce_url_changed(self) -> None:
+        if self._url_debounce_id is not None:
+            self.after_cancel(self._url_debounce_id)
+        self._url_debounce_id = self.after(50, self._fire_url_changed)
+
+    def _fire_url_changed(self) -> None:
+        self._url_debounce_id = None
+        self._on_url_changed()

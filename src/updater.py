@@ -1,8 +1,6 @@
 import threading
 from collections.abc import Callable
 
-import requests
-
 _GITHUB_REPO = "KingYes/yt-dlp-gui"
 _RELEASES_URL = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
 _TIMEOUT = 10
@@ -19,6 +17,8 @@ def check_for_update(callback: Callable[[str | None, str | None], None]) -> None
 
     def _worker() -> None:
         try:
+            import requests
+
             resp = requests.get(_RELEASES_URL, timeout=_TIMEOUT)
             resp.raise_for_status()
             data = resp.json()

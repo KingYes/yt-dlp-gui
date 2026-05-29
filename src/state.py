@@ -1,5 +1,6 @@
 import json
 import sys
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -75,6 +76,8 @@ _DEFAULT_STATE: dict[str, Any] = {
 class AppState:
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
+        self._save_timer: threading.Timer | None = None
+        self._save_lock = threading.Lock()
         self.load()
 
     def load(self) -> None:
@@ -92,11 +95,29 @@ class AppState:
                     self._data[key].setdefault(sub_key, sub_default)
 
     def save(self) -> None:
+        """Write state to disk immediately."""
         _STATE_DIR.mkdir(parents=True, exist_ok=True)
         _STATE_FILE.write_text(
             json.dumps(self._data, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    def save_debounced(self) -> None:
+        """Schedule a debounced save (500ms). Multiple rapid calls collapse into one write."""
+        with self._save_lock:
+            if self._save_timer is not None:
+                self._save_timer.cancel()
+            self._save_timer = threading.Timer(0.5, self.save)
+            self._save_timer.daemon = True
+            self._save_timer.start()
+
+    def flush_pending_save(self) -> None:
+        """Cancel any pending debounced save and write immediately."""
+        with self._save_lock:
+            if self._save_timer is not None:
+                self._save_timer.cancel()
+                self._save_timer = None
+        self.save()
 
     # ---------------------------------------------------------------- Stats
 
