@@ -12,7 +12,7 @@ from typing import Any
 
 _LOCALES_DIR: Path
 if getattr(sys, "frozen", False):
-    _LOCALES_DIR = Path(sys.executable).parent / "locales"
+    _LOCALES_DIR = Path(sys._MEIPASS) / "locales"  # type: ignore[attr-defined]
 else:
     _LOCALES_DIR = Path(__file__).resolve().parent.parent / "locales"
 
