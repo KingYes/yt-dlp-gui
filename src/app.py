@@ -12,19 +12,15 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 
+from .clipboard_dnd import ClipboardDndController
 from .download_handler import DownloadHandler
-from .download_manager import (
-    DownloadManager,
-    build_format_string,
-    parse_chapters,
-    parse_formats,
-    parse_subtitles,
-)
+from .download_manager import DownloadManager
 from .format_parser import FORMAT_PRESETS
 from .i18n import is_rtl, load_language, t
 from .layout_utils import _anchor_start, _c, _pad_end, _sticky_end, _sticky_start
+from .metadata_pickers import MetadataPickerController
+from .queue_controller import QueueController
 from .settings_window import SettingsWindow
-from .setup_wizard import SetupWizard
 from .state import AppState
 from .updater import APP_VERSION, check_for_update
 from .utils import (
@@ -38,20 +34,11 @@ from .utils import (
     truncate_filename,
     validate_time_range,
 )
-from .widgets.chapter_picker import ChapterPickerDialog
 from .widgets.format_frame import FormatFrame
 from .widgets.log_panel import LogPanel
 from .widgets.progress_panel import ProgressPanel
 from .widgets.queue_panel import QueuePanel
-from .widgets.subtitle_picker import SubtitlePickerDialog
 from .widgets.url_frame import UrlFrame
-
-try:
-    from tkinterdnd2 import DND_TEXT  # type: ignore[import-untyped]
-
-    _HAS_DND = True
-except ImportError:
-    _HAS_DND = False
 
 
 class App(ctk.CTk):
@@ -59,6 +46,7 @@ class App(ctk.CTk):
         super().__init__()
 
         self._main_queue: queue.Queue[Callable[[], None]] = queue.Queue()
+        self._drain_scheduled: bool = False
 
         self.geometry("780x640")
         self.minsize(640, 480)
@@ -77,6 +65,9 @@ class App(ctk.CTk):
 
         self._manager = DownloadManager()
         self._dl_handler = DownloadHandler(self, self._manager, self._call_on_main)
+        self._queue_ctrl = QueueController(self)
+        self._meta_ctrl = MetadataPickerController(self)
+        self._clipboard_ctrl = ClipboardDndController(self)
         self._output_dir = str(Path.home() / "Downloads")
         self._video_title: str = ""
         self._accumulated_bytes: int = 0
@@ -116,38 +107,60 @@ class App(ctk.CTk):
         if settings.get("clipboard_monitor"):
             self._start_clipboard_monitor()
 
-        self._drain_main_queue()
         self.after(200, self._startup_checks)
 
     # -------------------------------------------------- Thread-safe dispatcher
 
     def _call_on_main(self, func: Callable[[], None]) -> None:
         self._main_queue.put(func)
+        if not self._drain_scheduled:
+            self._drain_scheduled = True
+            try:
+                self.after(1, self._drain_main_queue)
+            except RuntimeError:
+                self._drain_scheduled = False
 
     def _drain_main_queue(self) -> None:
-        while True:
+        self._drain_scheduled = False
+        count = 0
+        while count < 64:
             try:
                 func = self._main_queue.get_nowait()
             except queue.Empty:
                 break
             with contextlib.suppress(Exception):
                 func()
-        self.after(16, self._drain_main_queue)
+            count += 1
+        if not self._main_queue.empty() and not self._drain_scheduled:
+            self._drain_scheduled = True
+            self.after(1, self._drain_main_queue)
 
     # --------------------------------------------------------- Startup checks
 
     def _startup_checks(self) -> None:
+        import threading
+
         ffmpeg_path = self._state.settings.get("ffmpeg_path", "")
-        if not check_ffmpeg(ffmpeg_path):
-            SetupWizard(self, self._state, on_complete=self._ensure_ffmpeg_in_path)
-        else:
-            self._ensure_ffmpeg_in_path()
+
+        def _check_ffmpeg_worker() -> None:
+            has_ffmpeg = check_ffmpeg(ffmpeg_path)
+            if not has_ffmpeg:
+                self._call_on_main(self._show_ffmpeg_wizard)
+            else:
+                self._call_on_main(self._ensure_ffmpeg_in_path)
+
+        threading.Thread(target=_check_ffmpeg_worker, daemon=True).start()
 
         def _on_update(version: str | None, url: str | None) -> None:
             if version and url:
                 self._call_on_main(lambda: self._show_update_banner(version, url))
 
         check_for_update(_on_update)
+
+    def _show_ffmpeg_wizard(self) -> None:
+        from .setup_wizard import SetupWizard
+
+        SetupWizard(self, self._state, on_complete=self._ensure_ffmpeg_in_path)
 
     def _ensure_ffmpeg_in_path(self) -> None:
         bin_dir = get_bin_dir()
@@ -286,33 +299,10 @@ class App(ctk.CTk):
     # ----------------------------------------------------------- DnD
 
     def _setup_dnd(self) -> None:
-        if not _HAS_DND:
-            return
-        try:
-            self._url.url_textbox.drop_target_register(DND_TEXT)
-            self._url.url_textbox.dnd_bind("<<Drop>>", self._on_dnd_drop)
-            self._url.url_entry.drop_target_register(DND_TEXT)
-            self._url.url_entry.dnd_bind("<<Drop>>", self._on_dnd_drop)
-        except Exception:
-            pass
+        self._clipboard_ctrl.setup_dnd()
 
     def _on_dnd_drop(self, event: object) -> None:
-        text = getattr(event, "data", "").strip()
-        if not text:
-            return
-        if self._input_mode == "single" and "\n" in text:
-            self._auto_switch_to_multiple(text)
-            return
-        if self._input_mode == "single":
-            self._url.url_entry.delete(0, "end")
-            self._url.url_entry.insert(0, text.split("\n")[0].strip())
-        else:
-            current = self._url.url_textbox.get("1.0", "end").strip()
-            if current:
-                self._url.url_textbox.insert("end", "\n" + text)
-            else:
-                self._url.url_textbox.delete("1.0", "end")
-                self._url.url_textbox.insert("1.0", text)
+        self._clipboard_ctrl._on_dnd_drop(event)
 
     # ---------------------------------------------------- Download items
 
@@ -395,44 +385,8 @@ class App(ctk.CTk):
             self._fmt.custom_format_frame.grid_forget()
             self._fmt.format_menu.configure(state="normal")
 
-    def _populate_format_picker(self, info: dict) -> None:
-        video_formats, audio_formats = parse_formats(info)
-        self._available_video_formats = video_formats
-        self._available_audio_formats = audio_formats
-
-        if video_formats:
-            labels = [f["label"] for f in video_formats]
-            self._fmt.video_format_menu.configure(values=labels, state="normal")
-            self._fmt.video_format_var.set(labels[0])
-        else:
-            self._fmt.video_format_menu.configure(values=[t("format.none_available")], state="disabled")
-            self._fmt.video_format_var.set(t("format.none_available"))
-
-        if audio_formats:
-            labels = [f["label"] for f in audio_formats]
-            self._fmt.audio_format_menu.configure(values=labels, state="normal")
-            self._fmt.audio_format_var.set(labels[0])
-        else:
-            self._fmt.audio_format_menu.configure(values=[t("format.none_available")], state="disabled")
-            self._fmt.audio_format_var.set(t("format.none_available"))
-
-        count_str = t("format.count", video=len(video_formats), audio=len(audio_formats))
-        self._fmt.format_status_label.configure(text=count_str, text_color="#17a2b8")
-
     def _get_custom_format_string(self) -> str:
-        video_id = ""
-        audio_id = ""
-        video_label = self._fmt.video_format_var.get()
-        for f in self._available_video_formats:
-            if f["label"] == video_label:
-                video_id = f["format_id"]
-                break
-        audio_label = self._fmt.audio_format_var.get()
-        for f in self._available_audio_formats:
-            if f["label"] == audio_label:
-                audio_id = f["format_id"]
-                break
-        return build_format_string(video_id, audio_id)
+        return self._meta_ctrl.get_custom_format_string()
 
     # ------------------------------------------------ Post-processing
 
@@ -496,124 +450,25 @@ class App(ctk.CTk):
     def _clear_metadata_pickers(self) -> None:
         self._last_preview_url_str = ""
         if self._available_subtitles["manual"] or self._available_subtitles["auto"]:
-            self._hide_subtitle_picker()
+            self._meta_ctrl.hide_subtitles()
         if self._available_chapters:
-            self._hide_chapter_picker()
+            self._meta_ctrl.hide_chapters()
 
     # ------------------------------------------------- Subtitle picker
 
-    def _populate_subtitle_picker(self, info: dict) -> None:
-        subs = parse_subtitles(info)
-        self._available_subtitles = subs
-        self._subtitle_vars.clear()
-        if not (subs["manual"] or subs["auto"]):
-            self._fmt.subtitle_summary_frame.grid_forget()
-            return
-        for entry in subs["manual"]:
-            self._subtitle_vars[entry["code"]] = ctk.BooleanVar(value=False)
-        for entry in subs["auto"]:
-            self._subtitle_vars[f"auto:{entry['code']}"] = ctk.BooleanVar(value=False)
-        self._subtitle_select_all_var.set(False)
-        self._update_subtitle_summary()
-        self._fmt.subtitle_summary_frame.grid(row=5, column=0, columnspan=4, padx=12, pady=(0, 6), sticky="ew")
-
-    def _hide_subtitle_picker(self) -> None:
-        self._fmt.subtitle_summary_frame.grid_forget()
-        self._available_subtitles = {"manual": [], "auto": []}
-        self._subtitle_vars.clear()
-        if self._subtitle_dialog and self._subtitle_dialog.winfo_exists():
-            self._subtitle_dialog.destroy()
-        self._subtitle_dialog = None
-
-    def _update_subtitle_summary(self) -> None:
-        total = len(self._subtitle_vars)
-        selected = sum(1 for v in self._subtitle_vars.values() if v.get())
-        if selected == 0:
-            text = t("format.subtitle_summary_none", total=total)
-        elif selected == total:
-            text = t("format.subtitle_summary_all", total=total)
-        else:
-            text = t("format.subtitle_summary_some", selected=selected, total=total)
-        self._fmt.subtitle_summary_label.configure(text=text)
-
     def _open_subtitle_picker_dialog(self) -> None:
-        if self._subtitle_dialog and self._subtitle_dialog.winfo_exists():
-            self._subtitle_dialog.focus()
-            return
-        self._subtitle_dialog = SubtitlePickerDialog(
-            self, self._available_subtitles, self._subtitle_vars,
-            self._subtitle_select_all_var,
-            on_close=self._update_subtitle_summary,
-        )
+        self._meta_ctrl.open_subtitle_dialog()
 
     def _get_selected_subtitle_langs(self) -> list[str] | None:
-        if not self._subtitle_vars:
-            return None
-        selected = []
-        for key, var in self._subtitle_vars.items():
-            if var.get():
-                code = key.replace("auto:", "")
-                if code not in selected:
-                    selected.append(code)
-        return selected if selected else None
+        return self._meta_ctrl.get_selected_subtitle_langs()
 
     # ------------------------------------------------- Chapter picker
 
-    def _populate_chapter_picker(self, info: dict) -> None:
-        chapters = parse_chapters(info)
-        self._available_chapters = chapters
-        self._chapter_vars.clear()
-        if not chapters:
-            self._fmt.chapter_summary_frame.grid_forget()
-            return
-        for _ch in chapters:
-            self._chapter_vars.append(ctk.BooleanVar(value=True))
-        self._chapter_select_all_var.set(True)
-        self._update_chapter_summary()
-        self._fmt.chapter_summary_frame.grid(row=6, column=0, columnspan=4, padx=12, pady=(0, 6), sticky="ew")
-
-    def _hide_chapter_picker(self) -> None:
-        self._fmt.chapter_summary_frame.grid_forget()
-        self._available_chapters = []
-        self._chapter_vars.clear()
-        if self._chapter_dialog and self._chapter_dialog.winfo_exists():
-            self._chapter_dialog.destroy()
-        self._chapter_dialog = None
-
-    def _update_chapter_summary(self) -> None:
-        total = len(self._chapter_vars)
-        selected = sum(1 for v in self._chapter_vars if v.get())
-        if selected == total:
-            text = t("format.chapter_summary_all", total=total)
-        elif selected == 0:
-            text = t("format.chapter_summary_none", total=total)
-        else:
-            text = t("format.chapter_summary_some", selected=selected, total=total)
-        self._fmt.chapter_summary_label.configure(text=text)
-
     def _open_chapter_picker_dialog(self) -> None:
-        if self._chapter_dialog and self._chapter_dialog.winfo_exists():
-            self._chapter_dialog.focus()
-            return
-        self._chapter_dialog = ChapterPickerDialog(
-            self, self._available_chapters, self._chapter_vars,
-            self._chapter_select_all_var,
-            on_close=self._update_chapter_summary,
-        )
+        self._meta_ctrl.open_chapter_dialog()
 
     def _get_selected_chapters(self) -> list[str] | None:
-        if not self._chapter_vars or not self._available_chapters:
-            return None
-        selected = []
-        all_selected = True
-        for i, var in enumerate(self._chapter_vars):
-            if var.get():
-                selected.append(self._available_chapters[i]["title"])
-            else:
-                all_selected = False
-        if all_selected:
-            return None
-        return selected if selected else None
+        return self._meta_ctrl.get_selected_chapters()
 
     # --------------------------------------------------- Settings / clipboard
 
@@ -644,44 +499,13 @@ class App(ctk.CTk):
             self._stop_clipboard_monitor()
 
     def _start_clipboard_monitor(self) -> None:
-        if self._clipboard_job is not None:
-            return
-        try:
-            self._clipboard_last = self.clipboard_get()
-        except Exception:
-            self._clipboard_last = ""
-        self._poll_clipboard()
+        self._clipboard_ctrl.start_monitor()
 
     def _stop_clipboard_monitor(self) -> None:
-        if self._clipboard_job is not None:
-            self.after_cancel(self._clipboard_job)
-            self._clipboard_job = None
+        self._clipboard_ctrl.stop_monitor()
 
     def _poll_clipboard(self) -> None:
-        try:
-            text = self.clipboard_get().strip()
-        except Exception:
-            text = ""
-        if text and text != self._clipboard_last and is_valid_url(text):
-            existing = self._get_urls()
-            if text not in existing:
-                if self._input_mode == "single":
-                    current = self._url.url_entry.get().strip()
-                    if current:
-                        self._auto_switch_to_multiple(current + "\n" + text)
-                    else:
-                        self._url.url_entry.delete(0, "end")
-                        self._url.url_entry.insert(0, text)
-                else:
-                    current = self._url.url_textbox.get("1.0", "end").strip()
-                    if current:
-                        self._url.url_textbox.insert("end", "\n" + text)
-                    else:
-                        self._url.url_textbox.delete("1.0", "end")
-                        self._url.url_textbox.insert("1.0", text)
-                self._log(t("log.clipboard_added", url=text))
-        self._clipboard_last = text
-        self._clipboard_job = self.after(1000, self._poll_clipboard)
+        self._clipboard_ctrl._poll()
 
     # --------------------------------------------------- History
 
@@ -756,9 +580,9 @@ class App(ctk.CTk):
             parts.append(t("preview.items_count", count=len(entries)))
         self._url.preview_label.configure(text=" | ".join(parts), text_color="#17a2b8")
         self._last_preview_url_str = "\n".join(self._get_urls())
-        self._populate_format_picker(info)
-        self._populate_subtitle_picker(info)
-        self._populate_chapter_picker(info)
+        self._meta_ctrl.populate_formats(info)
+        self._meta_ctrl.populate_subtitles(info)
+        self._meta_ctrl.populate_chapters(info)
 
     # --------------------------------------------------- State
 
@@ -839,7 +663,7 @@ class App(ctk.CTk):
         with contextlib.suppress(Exception):
             self._state.window_geometry = self.geometry()
         self._persist_queue()
-        self._state.save()
+        self._state.flush_pending_save()
         self.destroy()
 
     # --------------------------------------------------- Actions
@@ -981,105 +805,31 @@ class App(ctk.CTk):
     # --------------------------------------------------- Queue
 
     def _build_queue_entry(self, urls: list[str], playlist: bool) -> dict:
-        format_key = self._fmt.format_var.get()
-        download_section = self._fmt.section_var.get() and self._input_mode == "single"
-        convert_val = self._fmt.convert_var.get()
-        sub_val = self._fmt.subtitle_mode_var.get()
-        return {
-            "urls": urls,
-            "playlist": playlist,
-            "format_key": format_key,
-            "output_dir": self._output_dir,
-            "split_chapters": self._fmt.split_chapters_var.get(),
-            "custom_format_string": self._get_custom_format_string() if self._custom_format_enabled else "",
-            "section_start": self._fmt.section_start_entry.get().strip() if download_section else "",
-            "section_end": self._fmt.section_end_entry.get().strip() if download_section else "",
-            "convert_format": "" if convert_val == "None" else convert_val.lower(),
-            "subtitle_mode": {"Embed": "embed", "File": "file"}.get(sub_val, ""),
-            "subtitle_burn": self._fmt.burn_sub_var.get(),
-            "selected_chapters": self._get_selected_chapters(),
-            "selected_subtitle_langs": self._get_selected_subtitle_langs(),
-            "status": "queued",
-        }
+        return self._queue_ctrl.build_entry(urls, playlist)
 
     def _persist_queue(self) -> None:
-        self._state.save_queue(list(self._queue))
+        self._queue_ctrl.persist()
 
     def _update_queue_label(self) -> None:
-        count = len(self._queue)
-        self._fmt.queue_label.configure(text=t("queue.label_count", count=count) if count else "")
+        self._queue_ctrl.update_label()
 
     def _clear_queue(self) -> None:
-        self._queue.clear()
-        self._persist_queue()
-        self._update_queue_label()
-        self._queue_panel.rebuild(self._queue)
-        self._log(t("log.queue_cleared"))
+        self._queue_ctrl.clear()
 
     def _start_queue(self) -> None:
-        if not self._queue or self._manager.is_busy:
-            if self._manager.is_busy:
-                self._log(t("log.already_downloading"))
-            return
-        self._process_queue()
+        self._queue_ctrl.start()
 
     def _move_queue_item(self, index: int, direction: int) -> None:
-        new_index = index + direction
-        if new_index < 0 or new_index >= len(self._queue):
-            return
-        self._queue[index], self._queue[new_index] = self._queue[new_index], self._queue[index]
-        self._persist_queue()
-        self._queue_panel.rebuild(self._queue)
+        self._queue_ctrl.move_item(index, direction)
 
     def _remove_queue_item(self, index: int) -> None:
-        if 0 <= index < len(self._queue):
-            removed = self._queue.pop(index)
-            urls = removed.get("urls", [])
-            self._persist_queue()
-            self._update_queue_label()
-            self._queue_panel.rebuild(self._queue)
-            self._log(t("log.removed_from_queue", url=truncate_filename(urls[0], 40) if urls else "?"))
+        self._queue_ctrl.remove_item(index)
 
     def _process_queue(self) -> None:
-        if self._queue and not self._manager.is_busy:
-            entry = self._queue.pop(0)
-            self._persist_queue()
-            self._update_queue_label()
-            self._queue_panel.rebuild(self._queue)
-            self._dl_handler.start_download_from_entry(entry)
+        self._queue_ctrl.process_next()
 
     def _show_ambiguous_dialog(self, urls: list[str], ambiguous: list[str]) -> None:
-        dialog = ctk.CTkToplevel(self)
-        dialog.title(t("dialog.playlist_title"))
-        dialog.geometry("420x150")
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-
-        count = len(ambiguous)
-        body = t("dialog.playlist_single_url") if count == 1 else t("dialog.playlist_multi_url", count=count)
-        ctk.CTkLabel(dialog, text=body, font=ctk.CTkFont(size=13), justify="center").pack(pady=(20, 16))
-
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.pack(pady=(0, 12))
-
-        def pick(playlist: bool) -> None:
-            dialog.destroy()
-            if self._manager.is_busy:
-                entry = self._build_queue_entry(urls, playlist)
-                self._queue.append(entry)
-                self._persist_queue()
-                self._update_queue_label()
-                self._queue_panel.rebuild(self._queue)
-                self._log(t("log.queued_urls_short", count=len(urls)))
-            else:
-                self._dl_handler.start_download(urls, playlist=playlist)
-
-        ctk.CTkButton(btn_frame, text=t("dialog.single_video_only"), width=160, command=lambda: pick(False)).pack(side="left", padx=8)
-        ctk.CTkButton(
-            btn_frame, text=t("dialog.entire_playlist"), width=160,
-            fg_color="#28a745", hover_color="#218838", command=lambda: pick(True),
-        ).pack(side="left", padx=8)
+        self._queue_ctrl.show_ambiguous_dialog(urls, ambiguous)
 
     # --------------------------------------------------- Logging
 
