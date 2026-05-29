@@ -5,7 +5,7 @@ _GITHUB_REPO = "KingYes/yt-dlp-gui"
 _RELEASES_URL = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
 _TIMEOUT = 10
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 
 
 def check_for_update(callback: Callable[[str | None, str | None], None]) -> None:
