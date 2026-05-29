@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import sys
 from collections.abc import Callable
 
 import customtkinter as ctk
 
 from ..i18n import t
 from ..layout_utils import _anchor_start, _c, _pad_end, _pad_start, _sticky_start
+
+_MACOS = sys.platform == "darwin"
 
 
 class UrlFrame(ctk.CTkFrame):
@@ -53,8 +57,22 @@ class UrlFrame(ctk.CTkFrame):
         self.url_entry.bind("<Return>", lambda _: on_download())
         self.url_entry.bind("<KeyRelease>", lambda _: self.after(50, on_url_changed))
 
-        self.url_textbox = ctk.CTkTextbox(self, height=80, font=ctk.CTkFont(size=13))
+        self.url_textbox = ctk.CTkTextbox(self, height=80, font=ctk.CTkFont(size=13),
+                                          undo=True, autoseparators=True, maxundo=-1)
         self.url_textbox.bind("<KeyRelease>", lambda _: self.after(50, on_url_changed))
+
+        if _MACOS:
+            self.url_textbox.bind("<Command-z>", self._on_undo)
+            self.url_textbox.bind("<Command-Z>", self._on_redo)
+            self.url_textbox.bind("<Command-Shift-z>", self._on_redo)
+            self.url_textbox.bind("<Command-Shift-Z>", self._on_redo)
+        else:
+            self.url_textbox.bind("<Control-Shift-z>", self._on_redo)
+            self.url_textbox.bind("<Control-Shift-Z>", self._on_redo)
+            self.url_textbox.bind("<Control-y>", self._on_redo)
+
+        self._on_paste_cb = on_paste
+        self.url_entry.bind("<<Paste>>", self._on_entry_paste)
 
         self.url_entry.grid(row=1, column=0, padx=12, pady=(6, 0), sticky="ew")
 
@@ -84,3 +102,23 @@ class UrlFrame(ctk.CTkFrame):
 
     def set_mode(self, label: str) -> None:
         self._mode_var.set(label)
+
+    def _on_entry_paste(self, _event: object = None) -> str | None:
+        try:
+            text = self.clipboard_get().strip()
+        except Exception:
+            return None
+        if "\n" in text:
+            self._on_paste_cb()
+            return "break"
+        return None
+
+    def _on_undo(self, _event: object = None) -> str:
+        with contextlib.suppress(Exception):
+            self.url_textbox.edit_undo()
+        return "break"
+
+    def _on_redo(self, _event: object = None) -> str:
+        with contextlib.suppress(Exception):
+            self.url_textbox.edit_redo()
+        return "break"
