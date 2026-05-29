@@ -1,3 +1,5 @@
+import contextlib
+import sys
 from collections.abc import Callable
 from tkinter import filedialog
 from typing import Any
@@ -66,10 +68,26 @@ class SettingsWindow(ctk.CTkToplevel):
         theme_labels = [t("settings.theme_system"), t("settings.theme_dark"), t("settings.theme_light")]
         idx = theme_labels.index(label) if label in theme_labels else 0
         theme = _THEMES[idx]
+
+        # Release modal grab before theme change to prevent freeze on Windows.
+        # CustomTkinter's titlebar color update does withdraw()/update()/deiconify()
+        # on all windows, which deadlocks with an active grab_set().
+        if sys.platform.startswith("win"):
+            with contextlib.suppress(Exception):
+                self.grab_release()
+
         ctk.set_appearance_mode(theme)
         self._state.save_settings(theme=theme)
+
+        if sys.platform.startswith("win"):
+            self.after(50, self._restore_grab)
+
         if self._on_theme_changed:
             self._on_theme_changed()
+
+    def _restore_grab(self) -> None:
+        with contextlib.suppress(Exception):
+            self.grab_set()
 
     def _on_scale_change(self, value: float) -> None:
         value = round(value, 2)
