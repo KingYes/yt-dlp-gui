@@ -22,9 +22,9 @@ def _reset_main_entry_guard() -> Generator[None, None, None]:
 
 
 def test_main_invokes_qt_app() -> None:
-    with patch("src.qt.app.run_qt_app") as run_qt:
+    with patch.object(main_module, "_launch_gui") as launch:
         main_module.main()
-        run_qt.assert_called_once()
+        launch.assert_called_once()
 
 
 def test_reload_main_module() -> None:
