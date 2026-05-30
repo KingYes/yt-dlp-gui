@@ -1,6 +1,6 @@
 # yt-dlp GUI
 
-A cross-platform desktop GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with Python and [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter).
+A cross-platform desktop GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with Python and [PySide6](https://www.qt.io/) (Qt).
 
 Download videos, audio, and playlists from YouTube and [hundreds of other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) with a simple graphical interface. Available as a standalone executable for Windows, macOS, and Linux.
 
@@ -8,7 +8,7 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 
 ### Download
 
-- Single URL or batch download (paste multiple URLs, one per line)
+- Single URL or batch download (paste multiple URLs, one per line); settings, download queue, subtitle/chapter pickers, FFmpeg setup wizard, download history, system tray, and in-app update banner
 - Playlist and channel detection with smart prompting for ambiguous links
 - Drag-and-drop URLs into the window
 - Clipboard monitoring — automatically adds copied URLs
@@ -17,7 +17,7 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 
 ### Format & Quality
 
-- Preset formats: Best (video+audio), 720p, 480p, Audio Only (MP3)
+- Preset formats: Best (video+audio), 720p, 480p, Audio Only (MP3 via FFmpeg); Convert can switch to AAC, FLAC, etc.
 - Custom format picker — preview a video to select specific video and audio streams by resolution, codec, and bitrate
 - Post-download conversion: MP4, MKV, WebM, MP3, AAC, FLAC, WAV, OGG
 
@@ -63,12 +63,13 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 ### Settings
 
 - **Appearance**: theme (System / Dark / Light), UI scale (80%–150%), language selection (English, Hebrew — add more via JSON files)
-- **Download defaults**: speed limit, embed thumbnail, embed metadata, subtitle languages, clipboard monitoring
+- **Download defaults**: speed limit, embed thumbnail, embed metadata, subtitle languages, clipboard monitoring, minimize to tray on close
 - **Network**: proxy support, browser cookies (Chrome, Firefox, Edge, Safari, Brave, Opera, Vivaldi), Netscape cookie file
 - **Advanced**: portable mode (config stored next to executable)
 
 ### System Integration
 
+- System tray icon with minimize-to-tray on close (always, or when downloads/queue are active)
 - OS-level notifications on download completion (macOS, Windows, Linux)
 - Auto-update check against GitHub releases with in-app banner
 - First-run setup wizard that downloads and installs FFmpeg automatically
@@ -118,8 +119,11 @@ pip install pyinstaller
 
 pyinstaller --noconfirm --onefile --windowed \
   --name "yt-dlp-gui" \
-  --hidden-import customtkinter \
-  --collect-data customtkinter \
+  --hidden-import PySide6 \
+  --collect-submodules PySide6 \
+  --collect-all src \
+  --add-data "locales:locales" \
+  --add-data "assets:assets" \
   main.py
 ```
 
@@ -128,29 +132,29 @@ The executable will be in the `dist/` directory.
 ## Running Tests
 
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt
 pytest
 ```
 
 ## Project Structure
 
 ```
-main.py                   Entry point
+main.py                   Entry point (starts Qt app)
 src/
-  app.py                  Main application window and UI coordinator
+  qt/                     PySide6 UI (main window, dialogs, widgets)
   download_manager.py     yt-dlp wrapper with progress hooks and retry logic
   download_handler.py     Download orchestration bridging UI and manager
+  ffmpeg_installer.py     First-run FFmpeg download/extract helpers
   i18n.py                 Lightweight JSON-based internationalization module
   state.py                Persistent JSON state (stats, history, queue, settings)
-  settings_window.py      Settings dialog UI
-  setup_wizard.py         First-run FFmpeg download wizard
   updater.py              Auto-update checker against GitHub releases
   utils.py                URL validation, format helpers, OS utilities
-  widgets/                Extracted UI components (URL frame, format frame, etc.)
 locales/                  Translation JSON files (en.json, he.json, ...)
+scripts/build.ps1         Windows PyInstaller build helper
 tests/                    Unit tests (pytest)
 pyproject.toml            Ruff, mypy, and pytest configuration
 requirements.txt          Runtime dependencies
+requirements-dev.txt      pytest and pytest-qt
 ```
 
 ## License

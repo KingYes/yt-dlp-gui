@@ -58,6 +58,7 @@ _DEFAULT_STATE: dict[str, Any] = {
         "embed_thumbnail": False,
         "embed_metadata": False,
         "clipboard_monitor": False,
+        "minimize_to_tray": False,
         "proxy": "",
         "browser_cookies": "",
         "cookie_file": "",
