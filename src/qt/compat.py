@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtWidgets import QLabel, QProgressBar, QPushButton, QWidget
+from PySide6.QtWidgets import QLabel, QProgressBar, QPushButton
 
 
 class LabelCompat:
