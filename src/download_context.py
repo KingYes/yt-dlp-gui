@@ -31,7 +31,7 @@ class DownloadFormState:
 
 
 class DownloadContext(Protocol):
-    """Port for download orchestration (implemented by Qt and CustomTkinter)."""
+    """Port for download orchestration (implemented by QtDownloadContext)."""
 
     @property
     def state(self) -> AppState:

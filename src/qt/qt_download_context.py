@@ -19,6 +19,8 @@ from ..download_progress import (
     on_retry_item_finished,
     reset_progress_bar,
 )
+from ..state import AppState
+
 if TYPE_CHECKING:
     from .main_window import MainWindow
 
@@ -28,7 +30,7 @@ class QtDownloadContext:
         self._window = window
 
     @property
-    def state(self) -> object:
+    def state(self) -> AppState:
         return self._window._state
 
     @property

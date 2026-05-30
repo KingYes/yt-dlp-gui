@@ -11,6 +11,10 @@ class _FakeHost:
     def __init__(self) -> None:
         self._download_session = DownloadSession()
         self._state = None
+        self._progress = object()
+
+    def _log(self, message: str) -> None:
+        pass
 
 
 def test_prepare_download_sets_flags() -> None:

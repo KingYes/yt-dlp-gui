@@ -5,13 +5,13 @@ from __future__ import annotations
 import contextlib
 import os
 import platform
+import tarfile
 import tempfile
 import threading
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
-import tarfile
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
@@ -23,13 +23,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..i18n import t
 from ..ffmpeg_installer import (
     extract_btbn_archive,
     extract_evermeet_zip,
     get_download_urls,
     verify_ffmpeg,
 )
+from ..i18n import t
 from ..state import AppState
 from ..utils import get_bin_dir
 
@@ -106,9 +106,12 @@ class SetupWizardDialog(QDialog):
 
         try:
             for i, url in enumerate(urls):
-                self._schedule_on_main(
-                    lambda u=url: self._set_status(t("wizard.downloading", name=Path(u).name or "ffmpeg"))
-                )
+                download_name = Path(url).name or "ffmpeg"
+
+                def _show_download(name: str = download_name) -> None:
+                    self._set_status(t("wizard.downloading", name=name))
+
+                self._schedule_on_main(_show_download)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=self._suffix_for(url)) as tmp:
                     tmp_path = Path(tmp.name)
 
@@ -126,11 +129,17 @@ class SetupWizardDialog(QDialog):
                                 progress = downloaded / total
                                 if len(urls) > 1:
                                     progress = (i + progress) / len(urls)
-                                self._schedule_on_main(
-                                    lambda p=progress: self._progress.setValue(int(p * 100))
-                                )
+                                value = int(progress * 100)
 
-                    self._schedule_on_main(lambda: self._set_status(t("wizard.extracting")))
+                                def _set_progress(v: int = value) -> None:
+                                    self._progress.setValue(v)
+
+                                self._schedule_on_main(_set_progress)
+
+                    def _extracting() -> None:
+                        self._set_status(t("wizard.extracting"))
+
+                    self._schedule_on_main(_extracting)
 
                     if is_macos:
                         extract_evermeet_zip(tmp_path, bin_dir)
@@ -140,9 +149,16 @@ class SetupWizardDialog(QDialog):
                     if tmp_path.exists():
                         tmp_path.unlink()
 
-            self._schedule_on_main(lambda: self._set_status(t("wizard.verifying")))
+            def _verifying() -> None:
+                self._set_status(t("wizard.verifying"))
+
+            self._schedule_on_main(_verifying)
             if not verify_ffmpeg(bin_dir):
-                self._schedule_on_main(lambda: self._on_error(t("wizard.error_verification")))
+
+                def _verification_failed() -> None:
+                    self._on_error(t("wizard.error_verification"))
+
+                self._schedule_on_main(_verification_failed)
                 return
 
             ffmpeg_path = str(bin_dir)
@@ -152,11 +168,23 @@ class SetupWizardDialog(QDialog):
             self._schedule_on_main(self._on_success)
 
         except requests.RequestException as exc:
-            self._schedule_on_main(lambda: self._on_error(t("wizard.error_download", error=exc)))
+
+            def _download_error(e: BaseException = exc) -> None:
+                self._on_error(t("wizard.error_download", error=e))
+
+            self._schedule_on_main(_download_error)
         except (zipfile.BadZipFile, tarfile.TarError) as exc:
-            self._schedule_on_main(lambda: self._on_error(t("wizard.error_extraction", error=exc)))
+
+            def _extraction_error(e: BaseException = exc) -> None:
+                self._on_error(t("wizard.error_extraction", error=e))
+
+            self._schedule_on_main(_extraction_error)
         except OSError as exc:
-            self._schedule_on_main(lambda: self._on_error(t("wizard.error_filesystem", error=exc)))
+
+            def _filesystem_error(e: OSError = exc) -> None:
+                self._on_error(t("wizard.error_filesystem", error=e))
+
+            self._schedule_on_main(_filesystem_error)
 
     def _suffix_for(self, url: str) -> str:
         if ".tar.xz" in url:

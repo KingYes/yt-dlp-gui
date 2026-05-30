@@ -1,4 +1,4 @@
-"""Shared DownloadContext operations for Qt and CustomTkinter hosts."""
+"""Shared DownloadContext operations for Qt hosts."""
 
 from __future__ import annotations
 
@@ -6,14 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from .download_progress import (
     DownloadUIHost,
-    apply_progress_update,
-    apply_retry_progress,
-    on_download_finished,
-    on_item_finished,
-    on_retry_item_finished,
-    reset_progress_bar,
 )
-from .download_session import DownloadSession
 from .format_parser import is_audio_only_format
 
 if TYPE_CHECKING:

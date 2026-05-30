@@ -24,8 +24,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import get_available_languages, t
-from ..state import AppState
 from ..settings_constants import _BROWSER_LABELS, _BROWSERS, _THEMES
+from ..state import AppState
 from .theme import apply_theme, apply_ui_scale
 
 
@@ -223,7 +223,7 @@ class SettingsDialog(QDialog):
         from PySide6.QtWidgets import QApplication
 
         app = QApplication.instance()
-        if app is not None:
+        if isinstance(app, QApplication):
             apply_theme(app, self._state.settings)
         if self._on_theme_changed:
             self._on_theme_changed()
@@ -235,7 +235,7 @@ class SettingsDialog(QDialog):
         from PySide6.QtWidgets import QApplication
 
         app = QApplication.instance()
-        if app is not None:
+        if isinstance(app, QApplication):
             apply_ui_scale(app, self._state.settings)
 
     def _on_clipboard_toggle(self, enabled: bool) -> None:

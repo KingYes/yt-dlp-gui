@@ -69,9 +69,10 @@ class QueuePanel(QGroupBox):
 
     def rebuild(self, queue: list[dict]) -> None:
         while self._scroll_layout.count():
-            item = self._scroll_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            layout_item = self._scroll_layout.takeAt(0)
+            widget = layout_item.widget() if layout_item is not None else None
+            if widget is not None:
+                widget.deleteLater()
 
         if not queue:
             self._title.setText(t("queue.title"))

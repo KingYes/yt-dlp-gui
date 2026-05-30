@@ -87,13 +87,22 @@ class DownloadHandler:
         self._ctx.set_open_folder_enabled(False)
 
         def on_progress(data: dict) -> None:
-            self._schedule(lambda d=data: self._ctx.apply_progress_update(d))
+            def _update() -> None:
+                self._ctx.apply_progress_update(data)
+
+            self._schedule(_update)
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
-            self._schedule(lambda: self._ctx.on_item_finished(index, total, error))
+            def _finish() -> None:
+                self._ctx.on_item_finished(index, total, error)
+
+            self._schedule(_finish)
 
         def on_done(error: str | None) -> None:
-            self._schedule(lambda: self._ctx.on_download_finished(error))
+            def _finish() -> None:
+                self._ctx.on_download_finished(error)
+
+            self._schedule(_finish)
 
         self._manager.download_batch(
             urls,
@@ -123,13 +132,22 @@ class DownloadHandler:
         self._ctx.set_download_buttons_active(True)
 
         def on_progress(data: dict) -> None:
-            self._schedule(lambda d=data: self._ctx.apply_retry_progress(d, item_index))
+            def _update() -> None:
+                self._ctx.apply_retry_progress(data, item_index)
+
+            self._schedule(_update)
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
-            self._schedule(lambda: self._ctx.on_retry_item_finished(item_index, error))
+            def _finish() -> None:
+                self._ctx.on_retry_item_finished(item_index, error)
+
+            self._schedule(_finish)
 
         def on_done(error: str | None) -> None:
-            self._schedule(lambda: self._ctx.on_download_finished(error))
+            def _finish() -> None:
+                self._ctx.on_download_finished(error)
+
+            self._schedule(_finish)
 
         self._manager.download_batch(
             [url],
@@ -184,13 +202,22 @@ class DownloadHandler:
         selected_subtitle_langs: list[str] | None,
     ) -> None:
         def on_progress(data: dict) -> None:
-            self._schedule(lambda d=data: self._ctx.apply_progress_update(d))
+            def _update() -> None:
+                self._ctx.apply_progress_update(data)
+
+            self._schedule(_update)
 
         def on_item_done(index: int, total: int, error: str | None) -> None:
-            self._schedule(lambda: self._ctx.on_item_finished(index, total, error))
+            def _finish() -> None:
+                self._ctx.on_item_finished(index, total, error)
+
+            self._schedule(_finish)
 
         def on_done(error: str | None) -> None:
-            self._schedule(lambda: self._ctx.on_download_finished(error))
+            def _finish() -> None:
+                self._ctx.on_download_finished(error)
+
+            self._schedule(_finish)
 
         self._manager.download_batch(
             urls,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
@@ -139,9 +138,10 @@ class ProgressPanel(QGroupBox):
 
     def rebuild_detail_rows(self) -> None:
         while self._detailed_layout.count():
-            item = self._detailed_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            layout_item = self._detailed_layout.takeAt(0)
+            widget = layout_item.widget() if layout_item is not None else None
+            if widget is not None:
+                widget.deleteLater()
         self._detail_rows = []
         style = self.style()
         for i, item in enumerate(self._download_items):

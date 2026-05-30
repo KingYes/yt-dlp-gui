@@ -28,7 +28,7 @@ def load_window_icon() -> QIcon | None:
 
 
 def _fusion_standard_palette() -> QPalette:
-    """Fresh Fusion light palette (not the app’s current palette)."""
+    """Fresh Fusion light palette (not the app's current palette)."""
     style = QStyleFactory.create("Fusion")
     if style is None:
         return QPalette()
@@ -57,7 +57,7 @@ def _apply_dark_palette(app: QApplication) -> None:
 
 
 def _apply_light_palette(app: QApplication) -> None:
-    """Explicit Fusion light palette (Windows dark mode won’t override)."""
+    """Explicit Fusion light palette (Windows dark mode won't override)."""
     app.setPalette(_fusion_standard_palette())
 
 
@@ -137,7 +137,7 @@ def apply_theme(app: QApplication, settings: dict[str, Any]) -> None:
     effective = _resolve_effective_theme(settings)
     user_theme = settings.get("theme", "system")
 
-    # Don’t let Windows dark mode override an explicit Light/Dark choice.
+    # Do not let Windows dark mode override an explicit Light/Dark choice.
     app.setDesktopSettingsAware(user_theme == "system")
 
     app.setStyle("Fusion")
@@ -159,7 +159,7 @@ def ui_scale_factor(settings: dict[str, Any]) -> float:
 
 
 def apply_ui_scale(app: QApplication, settings: dict[str, Any]) -> None:
-    """Scale default application font (80%–150% from settings)."""
+    """Scale default application font (80%-150% from settings)."""
     scale = ui_scale_factor(settings)
     if scale == 1.0:
         return

@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 from typing import TYPE_CHECKING
 
-from PySide6.QtGui import QClipboard
 from PySide6.QtWidgets import QApplication
 
 from ..i18n import t
@@ -21,10 +20,16 @@ class QtClipboardController:
         self._last = ""
         self._connected = False
 
+    def _app(self) -> QApplication | None:
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            return app
+        return None
+
     def start(self) -> None:
         if self._connected:
             return
-        app = QApplication.instance()
+        app = self._app()
         if app is None:
             return
         clipboard = app.clipboard()
@@ -37,7 +42,7 @@ class QtClipboardController:
     def stop(self) -> None:
         if not self._connected:
             return
-        app = QApplication.instance()
+        app = self._app()
         if app is None:
             self._connected = False
             return
@@ -50,7 +55,7 @@ class QtClipboardController:
         self._connected = False
 
     def _on_changed(self) -> None:
-        app = QApplication.instance()
+        app = self._app()
         if app is None:
             return
         clipboard = app.clipboard()

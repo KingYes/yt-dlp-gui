@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
-import contextlib
 import os
 import re
 import threading
-import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QFileDialog,
-    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -26,8 +22,8 @@ from PySide6.QtWidgets import (
 )
 
 from ..download_handler import DownloadHandler
-from ..download_session import DownloadSession
 from ..download_manager import DownloadManager
+from ..download_session import DownloadSession
 from ..format_parser import FORMAT_PRESETS, build_format_string, normalize_format_preset, parse_formats
 from ..i18n import is_rtl, load_language, t
 from ..state import AppState
@@ -58,7 +54,7 @@ from .widgets.queue_panel import QueuePanel
 from .widgets.url_panel import UrlPanel
 
 if TYPE_CHECKING:
-    from PySide6.QtWidgets import QApplication
+    pass
 
 
 class MainWindow(QMainWindow):
@@ -475,7 +471,7 @@ class MainWindow(QMainWindow):
         box.setText(msg)
         box.setIcon(QMessageBox.Icon.Question)
         yes_btn = box.addButton(t("dialog.entire_playlist"), QMessageBox.ButtonRole.YesRole)
-        no_btn = box.addButton(t("dialog.single_video_only"), QMessageBox.ButtonRole.NoRole)
+        box.addButton(t("dialog.single_video_only"), QMessageBox.ButtonRole.NoRole)
         box.addButton(QMessageBox.StandardButton.Cancel)
         box.exec()
         clicked = box.clickedButton()
@@ -694,7 +690,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QApplication
 
         app = QApplication.instance()
-        if app is not None:
+        if isinstance(app, QApplication):
             direction = Qt.LayoutDirection.RightToLeft if is_rtl() else Qt.LayoutDirection.LeftToRight
             app.setLayoutDirection(direction)
         self._retranslate_ui()
