@@ -46,7 +46,7 @@ class OutputPanel(QGroupBox):
         self._folder_combo.blockSignals(False)
 
     def current_folder(self) -> str:
-        return self._folder_combo.currentText()
+        return str(self._folder_combo.currentText())
 
     def retranslate_ui(self) -> None:
         self.setTitle(t("output.label"))

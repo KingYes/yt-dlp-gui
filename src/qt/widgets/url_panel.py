@@ -117,8 +117,8 @@ class UrlPanel(QGroupBox):
 
     def get_text(self) -> str:
         if self._input_mode == "single":
-            return self._single_edit.text().strip()
-        return self._multi_edit.toPlainText().strip()
+            return str(self._single_edit.text()).strip()
+        return str(self._multi_edit.toPlainText()).strip()
 
     def get_urls(self) -> list[str]:
         if self._input_mode == "single":

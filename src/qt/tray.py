@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from ..ffmpeg_utils import send_notification
 from ..i18n import t
+from ..tray_policy import should_minimize_on_close
 from .theme import load_window_icon
 
 if TYPE_CHECKING:
@@ -64,17 +65,12 @@ class TrayController:
         win = self._window
         return win._manager.is_busy or bool(win._queue)
 
-    @staticmethod
-    def should_minimize_on_close(*, minimize_to_tray: bool, downloads_active: bool) -> bool:
-        """Whether closing the window should hide to the tray instead of quitting."""
-        return minimize_to_tray or downloads_active
-
     def handle_close_event(self) -> bool:
         """Minimize to tray when enabled or downloads are active. Return True if handled."""
         if self._tray is None:
             return False
         minimize = bool(self._window._state.settings.get("minimize_to_tray", False))
-        if not self.should_minimize_on_close(
+        if not should_minimize_on_close(
             minimize_to_tray=minimize,
             downloads_active=self._downloads_active(),
         ):

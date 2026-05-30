@@ -247,7 +247,7 @@ class FormatPanel(QGroupBox):
         self._custom_check.setChecked(value)
 
     def get_format_key(self) -> str:
-        return self._format_combo.currentText()
+        return str(self._format_combo.currentText())
 
     def set_format_key(self, key: str) -> None:
         idx = self._format_combo.findText(key)
