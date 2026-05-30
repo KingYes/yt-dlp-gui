@@ -64,20 +64,30 @@ class TestDefaultFormat:
 
 class TestAudioOnly:
     def test_has_extract_audio_postprocessor(self) -> None:
-        opts = _build(format_key="Audio Only (mp3)")
+        opts = _build(format_key="Audio Only")
         pps = opts.get("postprocessors", [])
         keys = [pp["key"] for pp in pps]
         assert "FFmpegExtractAudio" in keys
 
     def test_extract_audio_config(self) -> None:
-        opts = _build(format_key="Audio Only (mp3)")
+        opts = _build(format_key="Audio Only")
         pp = next(p for p in opts["postprocessors"] if p["key"] == "FFmpegExtractAudio")
         assert pp["preferredcodec"] == "mp3"
         assert pp["preferredquality"] == "192"
 
+    def test_extract_audio_when_convert_aac(self) -> None:
+        opts = _build(format_key="Audio Only", settings={"convert_format": "aac"})
+        pp = next(p for p in opts["postprocessors"] if p["key"] == "FFmpegExtractAudio")
+        assert pp["preferredcodec"] == "aac"
+
     def test_audio_format_string(self) -> None:
-        opts = _build(format_key="Audio Only (mp3)")
+        opts = _build(format_key="Audio Only")
         assert opts["format"] == "bestaudio/best"
+
+    def test_legacy_preset_name(self) -> None:
+        opts = _build(format_key="Audio Only (mp3)")
+        keys = [pp["key"] for pp in opts.get("postprocessors", [])]
+        assert "FFmpegExtractAudio" in keys
 
 
 class TestSplitChapters:
@@ -95,7 +105,7 @@ class TestSplitChapters:
         assert opts["outtmpl"] == expected
 
     def test_audio_and_split_chapters_combined(self) -> None:
-        opts = _build(format_key="Audio Only (mp3)", split_chapters=True)
+        opts = _build(format_key="Audio Only", split_chapters=True)
         keys = [pp["key"] for pp in opts["postprocessors"]]
         assert "FFmpegExtractAudio" in keys
         assert "FFmpegSplitChapters" in keys
@@ -422,10 +432,15 @@ class TestPostProcessingConversion:
         assert extractor["preferredcodec"] == "ogg"
 
     def test_conversion_skipped_for_audio_only_preset(self) -> None:
-        opts = _build(format_key="Audio Only (mp3)", settings={"convert_format": "mp4"})
+        opts = _build(format_key="Audio Only", settings={"convert_format": "mp4"})
         pps = opts["postprocessors"]
         keys = [pp["key"] for pp in pps]
         assert "FFmpegVideoConvertor" not in keys
+        assert keys.count("FFmpegExtractAudio") == 1
+
+    def test_audio_only_with_convert_mp3_uses_extract(self) -> None:
+        opts = _build(format_key="Audio Only", settings={"convert_format": "mp3"})
+        keys = [pp["key"] for pp in opts["postprocessors"]]
         assert keys.count("FFmpegExtractAudio") == 1
 
     def test_conversion_combined_with_embed_thumbnail(self) -> None:

@@ -183,9 +183,26 @@ def parse_chapters(info_dict: dict) -> list[dict]:
 
 _AUDIO_FORMATS = {"mp3", "aac", "flac", "wav", "ogg"}
 
+# Preset shown in the UI; legacy key kept for saved state.json
+AUDIO_ONLY_PRESET = "Audio Only"
+AUDIO_ONLY_LEGACY_PRESET = "Audio Only (mp3)"
+_AUDIO_ONLY_FORMAT = "bestaudio/best"
+
 FORMAT_PRESETS = {
     "Best (video+audio)": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
     "720p": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
     "480p": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best",
-    "Audio Only (mp3)": "bestaudio/best",
+    AUDIO_ONLY_PRESET: _AUDIO_ONLY_FORMAT,
 }
+
+
+def is_audio_only_format(format_key: str) -> bool:
+    """True for the audio-only preset (current or legacy saved name)."""
+    return format_key in (AUDIO_ONLY_PRESET, AUDIO_ONLY_LEGACY_PRESET)
+
+
+def normalize_format_preset(format_key: str) -> str:
+    """Map legacy preset names to current keys."""
+    if format_key == AUDIO_ONLY_LEGACY_PRESET:
+        return AUDIO_ONLY_PRESET
+    return format_key

@@ -16,7 +16,7 @@ alwaysApply: true
 
 - **Order**: stdlib → third-party → local modules (enforced by ruff isort).
 - **Optional imports** in `try/except ImportError` blocks at the end of the import section, setting a `_HAS_<NAME>` boolean.
-- **Alias**: `import customtkinter as ctk`.
+- **Qt imports**: `from PySide6.QtWidgets import ...` (group by module as in existing `src/qt/` files).
 - **Relative imports within the `src/` package** (e.g. `from .utils import ...`). Absolute imports for stdlib and third-party.
 
 ## Naming
