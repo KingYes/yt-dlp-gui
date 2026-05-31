@@ -147,6 +147,8 @@
   "notify.downloading": "מוריד {done}/{total}",
 
   "section.error_enter_time": "הזן לפחות זמן התחלה או סיום.",
+  "section.error_start_before_end": "[TODO] Start time must be before end time.",
+  "section.error_exceeds_duration": "[TODO] Time exceeds video duration ({time}).",
   "section.error_invalid_start": "פורמט זמן התחלה לא תקין.",
   "section.error_invalid_end": "פורמט זמן סיום לא תקין.",
 
@@ -154,6 +156,7 @@
   "manager.cancelled": "ההורדה בוטלה.",
 
   "settings.title": "הגדרות",
+  "settings.ok": "אישור",
   "settings.appearance": "מראה",
   "settings.theme": "ערכת נושא:",
   "settings.theme_system": "מערכת",

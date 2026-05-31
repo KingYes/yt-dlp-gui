@@ -10,7 +10,7 @@ All I/O, downloads, and network calls **must** run in background daemon threads 
 
 ## Main-Thread Dispatcher
 
-Use `queue.Queue[Callable[[], None]]` + `self.after(16, self._drain_main_queue)` to marshal callbacks from worker threads to the main thread. Background threads call `_call_on_main(func)` to schedule work on the UI thread.
+Use `Signal(object)` + `_schedule_on_main(func)` to marshal callbacks from worker threads to the main thread. The Signal is connected to `_exec_on_main` which executes the callable on the Qt main thread.
 
 ## Rules
 
@@ -18,5 +18,6 @@ Use `queue.Queue[Callable[[], None]]` + `self.after(16, self._drain_main_queue)`
 - **`DownloadManager` must never import or reference UI widgets.** Communicate results via callbacks (`progress_callback`, `item_done_callback`, `done_callback`).
 - **Cancellation** — use `threading.Event` (`_cancel_event`). Never kill threads.
 - **Single background thread per download session** — no thread pools. Sequential batch downloads use one thread iterating over URLs.
-- **Progress throttling** — `_on_progress` skips `downloading` events within 50 ms of the last one to reduce main-queue flooding.
-- **`self.after()` timers** for periodic main-thread work (clipboard polling, queue processing). Keep intervals consistent with existing values (16 ms queue drain, 1000 ms clipboard).
+- **Progress throttling** — `_on_progress` skips `downloading` events within 50 ms of the last one to reduce Signal flooding.
+- **`QTimer.singleShot()`** for deferred main-thread work (startup checks, queue processing).
+- **Shutdown guard** — `_exec_on_main` checks `_shutting_down` flag to discard callbacks arriving after window destruction.

@@ -32,6 +32,7 @@ from ..ffmpeg_installer import (
 from ..i18n import t
 from ..state import AppState
 from ..utils import get_bin_dir
+from .theme import danger_color, muted_color
 
 _CHUNK_SIZE = 64 * 1024
 
@@ -70,7 +71,7 @@ class SetupWizardDialog(QDialog):
 
         self._status = QLabel("")
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status.setStyleSheet("color: gray; font-size: 11px;")
+        self._status.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
         layout.addWidget(self._status)
 
         btn_row = QHBoxLayout()
@@ -195,7 +196,7 @@ class SetupWizardDialog(QDialog):
 
     def _set_status(self, text: str) -> None:
         self._status.setText(text)
-        self._status.setStyleSheet("color: gray; font-size: 11px;")
+        self._status.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
 
     def _on_success(self) -> None:
         self._progress.setValue(100)
@@ -210,7 +211,7 @@ class SetupWizardDialog(QDialog):
     def _on_error(self, message: str) -> None:
         self._downloading = False
         self._status.setText(message)
-        self._status.setStyleSheet("color: #dc3545; font-size: 11px;")
+        self._status.setStyleSheet(f"color: {danger_color().name()}; font-size: 11px;")
         self._install_btn.setText(t("wizard.retry"))
         self._install_btn.setEnabled(True)
         self._skip_btn.setEnabled(True)

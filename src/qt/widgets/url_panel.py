@@ -154,6 +154,8 @@ class UrlPanel(QGroupBox):
         self.preview_label.setText(text)
         if color:
             self.preview_label.setStyleSheet(f"color: {color};")
+        else:
+            self.preview_label.setStyleSheet("")
 
     def set_preview_enabled(self, enabled: bool) -> None:
         self.preview_btn.setEnabled(enabled)

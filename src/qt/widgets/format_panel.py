@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from ...format_parser import FORMAT_PRESETS
 from ...i18n import t
 from ..compat import BooleanVarCompat, ButtonCompat, EntryCompat, LabelCompat, StringVarCompat
+from ..theme import danger_color
 
 
 class FormatPanel(QGroupBox):
@@ -116,7 +117,7 @@ class FormatPanel(QGroupBox):
         self._section_end.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         sf.addWidget(self._section_end)
         self._section_error = QLabel("")
-        self._section_error.setStyleSheet("color: #dc3545;")
+        self._update_section_error_color()
         sf.addWidget(self._section_error)
         self.section_frame.hide()
         root.addWidget(self.section_frame)
@@ -125,25 +126,31 @@ class FormatPanel(QGroupBox):
         self._convert_lbl = QLabel(t("format.convert"))
         pp.addWidget(self._convert_lbl)
         self._convert_combo = QComboBox()
-        convert_values = ["None", "MP4", "MKV", "WebM", "MP3", "AAC", "FLAC", "WAV", "OGG"]
-        self._convert_combo.addItems(convert_values)
+        self._convert_keys = ["None", "MP4", "MKV", "WebM", "MP3", "AAC", "FLAC", "WAV", "OGG"]
+        for key in self._convert_keys:
+            label = t("format.convert_none") if key == "None" else key
+            self._convert_combo.addItem(label, userData=key)
         current_convert = settings.get("convert_format", "")
-        convert_display = current_convert.upper() if current_convert else "None"
-        if convert_display not in convert_values:
-            convert_display = "None"
-        self._convert_combo.setCurrentText(convert_display)
-        self._convert_combo.currentTextChanged.connect(on_convert_changed)
+        convert_key = current_convert.upper() if current_convert else "None"
+        if convert_key not in self._convert_keys:
+            convert_key = "None"
+        self._convert_combo.setCurrentIndex(self._convert_keys.index(convert_key))
+        self._on_convert_changed = on_convert_changed
+        self._convert_combo.currentIndexChanged.connect(self._emit_convert_changed)
         pp.addWidget(self._convert_combo)
 
         self._subs_lbl = QLabel(t("format.subs"))
         pp.addWidget(self._subs_lbl)
         self._sub_combo = QComboBox()
-        sub_values = ["None", "Embed", "File"]
-        self._sub_combo.addItems(sub_values)
+        self._sub_keys = ["None", "Embed", "File"]
+        self._sub_labels = [t("format.subs_none"), t("format.subs_embed"), t("format.subs_file")]
+        for label, key in zip(self._sub_labels, self._sub_keys, strict=True):
+            self._sub_combo.addItem(label, userData=key)
         current_sub = settings.get("subtitle_mode", "")
-        sub_display = {"embed": "Embed", "file": "File"}.get(current_sub, "None")
-        self._sub_combo.setCurrentText(sub_display)
-        self._sub_combo.currentTextChanged.connect(on_subtitle_mode_changed)
+        sub_key = {"embed": "Embed", "file": "File"}.get(current_sub, "None")
+        self._sub_combo.setCurrentIndex(self._sub_keys.index(sub_key))
+        self._on_subtitle_mode_changed = on_subtitle_mode_changed
+        self._sub_combo.currentIndexChanged.connect(self._emit_subtitle_mode_changed)
         pp.addWidget(self._sub_combo)
 
         self._burn_check = QCheckBox(t("format.burn_subs"))
@@ -186,12 +193,16 @@ class FormatPanel(QGroupBox):
             self._on_section_var_set,
         )
         self.convert_var = StringVarCompat(
-            lambda: self._convert_combo.currentText(),
-            self._convert_combo.setCurrentText,
+            lambda: str(self._convert_combo.currentData() or "None"),
+            lambda v: self._convert_combo.setCurrentIndex(
+                self._convert_keys.index(v) if v in self._convert_keys else 0
+            ),
         )
         self.subtitle_mode_var = StringVarCompat(
-            lambda: self._sub_combo.currentText(),
-            self._sub_combo.setCurrentText,
+            lambda: str(self._sub_combo.currentData() or "None"),
+            lambda v: self._sub_combo.setCurrentIndex(
+                self._sub_keys.index(v) if v in self._sub_keys else 0
+            ),
         )
         self.burn_sub_var = BooleanVarCompat(
             lambda: self._burn_check.isChecked(),
@@ -214,7 +225,7 @@ class FormatPanel(QGroupBox):
             self._section_end.setText,
         )
         self.custom_format_var = BooleanVarCompat(
-            lambda: self._custom_format_enabled,
+            lambda: self._custom_check.isChecked(),
             self._set_custom_format_enabled,
         )
         self.format_menu = _ComboCompat(self._format_combo)
@@ -254,6 +265,20 @@ class FormatPanel(QGroupBox):
         if idx >= 0:
             self._format_combo.setCurrentIndex(idx)
 
+    def _emit_convert_changed(self, index: int) -> None:
+        key = self._convert_combo.itemData(index)
+        if key is not None:
+            self._on_convert_changed(str(key))
+
+    def _emit_subtitle_mode_changed(self, index: int) -> None:
+        key = self._sub_combo.itemData(index)
+        if key is not None:
+            self._on_subtitle_mode_changed(str(key))
+
+    def _update_section_error_color(self) -> None:
+        c = danger_color()
+        self._section_error.setStyleSheet(f"color: {c.name()};")
+
     def set_custom_format_visible(self, visible: bool) -> None:
         self._custom_format_enabled = visible
         if visible:
@@ -281,6 +306,22 @@ class FormatPanel(QGroupBox):
         self._burn_check.setText(t("format.burn_subs"))
         self._sub_edit_btn.setText(t("format.edit"))
         self._ch_edit_btn.setText(t("format.edit"))
+        # Re-translate combo display labels (preserve current selection)
+        convert_idx = self._convert_combo.currentIndex()
+        self._convert_combo.blockSignals(True)
+        for i, key in enumerate(self._convert_keys):
+            label = t("format.convert_none") if key == "None" else key
+            self._convert_combo.setItemText(i, label)
+        self._convert_combo.setCurrentIndex(convert_idx)
+        self._convert_combo.blockSignals(False)
+        sub_idx = self._sub_combo.currentIndex()
+        self._sub_combo.blockSignals(True)
+        new_labels = [t("format.subs_none"), t("format.subs_embed"), t("format.subs_file")]
+        for i, label in enumerate(new_labels):
+            self._sub_combo.setItemText(i, label)
+        self._sub_combo.setCurrentIndex(sub_idx)
+        self._sub_combo.blockSignals(False)
+        self._update_section_error_color()
 
     def set_video_audio_formats(self, video_labels: list[str], audio_labels: list[str]) -> None:
         self._video_combo.clear()

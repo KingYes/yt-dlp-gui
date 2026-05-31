@@ -11,8 +11,6 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-_CHUNK_SIZE = 64 * 1024
-
 _BTBN_BASE = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
 
 _DOWNLOAD_URLS: dict[tuple[str, str], list[str]] = {

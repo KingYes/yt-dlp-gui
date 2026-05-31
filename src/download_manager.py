@@ -109,7 +109,7 @@ class DownloadManager:
         finished_files: list[str] | None = None,
         selected_chapters: list[str] | None = None,
         selected_subtitle_langs: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build yt-dlp options with a progress hook baked in.
 
         If *finished_files* is provided, filenames from "finished" progress
@@ -144,7 +144,7 @@ class DownloadManager:
         format_string: str = "",
         selected_chapters: list[str] | None = None,
         selected_subtitle_langs: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build yt-dlp options without progress hooks (caller adds them)."""
         if format_string:
             format_str = format_string

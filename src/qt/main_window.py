@@ -7,7 +7,6 @@ import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QKeySequence
@@ -25,7 +24,7 @@ from ..download_handler import DownloadHandler
 from ..download_manager import DownloadManager
 from ..download_session import DownloadSession
 from ..format_parser import FORMAT_PRESETS, build_format_string, normalize_format_preset, parse_formats
-from ..i18n import is_rtl, load_language, t
+from ..i18n import is_rtl, t
 from ..state import AppState
 from ..updater import APP_VERSION, check_for_update
 from ..utils import (
@@ -44,6 +43,7 @@ from .metadata_pickers import QtMetadataPickerController
 from .qt_download_context import QtDownloadContext
 from .settings_dialog import SettingsDialog
 from .setup_wizard_dialog import SetupWizardDialog
+from .theme import danger_color, info_color, muted_color
 from .tray import TrayController
 from .update_banner import UpdateBanner
 from .widgets.format_panel import FormatPanel
@@ -52,9 +52,6 @@ from .widgets.output_panel import OutputPanel
 from .widgets.progress_panel import ProgressPanel
 from .widgets.queue_panel import QueuePanel
 from .widgets.url_panel import UrlPanel
-
-if TYPE_CHECKING:
-    pass
 
 
 class MainWindow(QMainWindow):
@@ -66,16 +63,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._state = app_state
         settings = self._state.settings
-        load_language(settings.get("language", "en"))
 
         from PySide6.QtWidgets import QApplication
 
         qapp = QApplication.instance()
         if qapp is not None and isinstance(qapp, QApplication):
-            from .theme import apply_theme, apply_ui_scale
-
-            apply_theme(qapp, settings)
-            apply_ui_scale(qapp, settings)
             direction = Qt.LayoutDirection.RightToLeft if is_rtl() else Qt.LayoutDirection.LeftToRight
             qapp.setLayoutDirection(direction)
 
@@ -102,6 +94,7 @@ class MainWindow(QMainWindow):
         self._available_video_formats: list[dict] = []
         self._available_audio_formats: list[dict] = []
         self._last_preview_url_str = ""
+        self._shutting_down = False
 
         self._run_on_main.connect(self._exec_on_main)
 
@@ -116,6 +109,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(200, self._startup_checks)
 
     def _exec_on_main(self, func: object) -> None:
+        if self._shutting_down:
+            return
         if callable(func):
             func()
 
@@ -177,7 +172,6 @@ class MainWindow(QMainWindow):
         self._progress = ProgressPanel(
             container,
             on_open_folder=self._on_open_folder,
-            on_view_changed=self._on_progress_view_toggle,
             on_retry_item=self._retry_item,
         )
         layout.addWidget(self._progress)
@@ -288,9 +282,6 @@ class MainWindow(QMainWindow):
             schedule_on_main=self._schedule_on_main,
         )
         dialog.exec()
-
-    def _show_ffmpeg_warning(self) -> None:
-        QMessageBox.warning(self, t("app.title"), t("qt.ffmpeg_missing"))
 
     def _ensure_ffmpeg_in_path(self) -> None:
         bin_dir = get_bin_dir()
@@ -522,17 +513,17 @@ class MainWindow(QMainWindow):
 
     def _on_preview(self) -> None:
         if not self._check_ytdlp_available():
-            self._url_panel.set_preview_text(t("qt.ytdlp_missing_short"), "#dc3545")
+            self._url_panel.set_preview_text(t("qt.ytdlp_missing_short"), danger_color().name())
             return
         urls = self._get_urls()
         if not urls:
-            self._url_panel.set_preview_text(t("preview.enter_url"), "gray")
+            self._url_panel.set_preview_text(t("preview.enter_url"), muted_color().name())
             return
         url = urls[0]
         if not is_valid_url(url):
-            self._url_panel.set_preview_text(t("preview.invalid_url"), "#dc3545")
+            self._url_panel.set_preview_text(t("preview.invalid_url"), danger_color().name())
             return
-        self._url_panel.set_preview_text(t("preview.fetching"), "gray")
+        self._url_panel.set_preview_text(t("preview.fetching"), muted_color().name())
         self._url_panel.set_preview_enabled(False)
 
         def _on_info(info: dict | None, error: str | None) -> None:
@@ -543,12 +534,12 @@ class MainWindow(QMainWindow):
     def _show_preview(self, info: dict | None, error: str | None) -> None:
         self._url_panel.set_preview_enabled(True)
         if error or not info:
-            self._url_panel.set_preview_text(t("preview.failed", error=error or "no data"), "#dc3545")
+            self._url_panel.set_preview_text(t("preview.failed", error=error or "no data"), danger_color().name())
             return
         try:
             self._apply_preview_info(info)
         except Exception as exc:
-            self._url_panel.set_preview_text(t("preview.failed", error=str(exc)), "#dc3545")
+            self._url_panel.set_preview_text(t("preview.failed", error=str(exc)), danger_color().name())
 
     def _apply_preview_info(self, info: dict) -> None:
         title = info.get("title", t("history.unknown_title"))
@@ -567,7 +558,7 @@ class MainWindow(QMainWindow):
         entries = info.get("entries")
         if entries:
             parts.append(t("preview.items_count", count=len(entries)))
-        self._url_panel.set_preview_text(" | ".join(parts), "#17a2b8")
+        self._url_panel.set_preview_text(" | ".join(parts), info_color().name())
         self._last_preview_url_str = "\n".join(self._get_urls())
         self._populate_formats(info)
         self._metadata.populate_subtitles(info)
@@ -596,10 +587,6 @@ class MainWindow(QMainWindow):
 
     def _on_open_folder(self) -> None:
         open_folder(self._output_dir)
-
-    def _on_progress_view_toggle(self, view: str) -> None:
-        if view != self._progress.progress_view:
-            self._progress.switch_view(view)
 
     def _init_download_items(self, urls: list[str]) -> None:
         items = [
@@ -747,16 +734,20 @@ class MainWindow(QMainWindow):
         if app is not None:
             app.quit()
 
-    def _shutdown(self) -> None:
-        self._manager.cancel()
-        self._clipboard_ctrl.stop()
-        self._tray.quit()
+    def _save_state_to_disk(self) -> None:
         size = self.size()
         pos = self.pos()
         geometry = f"{size.width()}x{size.height()}+{pos.x()}+{pos.y()}"
         self._state._data["window_geometry"] = geometry
         self._persist_queue()
         self._state.flush_pending_save()
+
+    def _shutdown(self) -> None:
+        self._shutting_down = True
+        self._manager.cancel()
+        self._clipboard_ctrl.stop()
+        self._tray.quit()
+        self._save_state_to_disk()
 
     def _update_queue_label(self) -> None:
         count = len(self._queue)

@@ -20,6 +20,8 @@ class TrayController:
     def __init__(self, window: MainWindow) -> None:
         self._window = window
         self._tray: QSystemTrayIcon | None = None
+        self._show_action: QAction | None = None
+        self._quit_action: QAction | None = None
         self._setup()
 
     def _setup(self) -> None:
@@ -31,12 +33,12 @@ class TrayController:
         self._tray = QSystemTrayIcon(icon, self._window)
         self._tray.setToolTip(t("tray.tooltip"))
         menu = QMenu(self._window)
-        show_action = QAction(t("tray.show_window"), self._window)
-        show_action.triggered.connect(self._show_window)
-        quit_action = QAction(t("tray.quit"), self._window)
-        quit_action.triggered.connect(self._window.quit_application)
-        menu.addAction(show_action)
-        menu.addAction(quit_action)
+        self._show_action = QAction(t("tray.show_window"), self._window)
+        self._show_action.triggered.connect(self._show_window)
+        self._quit_action = QAction(t("tray.quit"), self._window)
+        self._quit_action.triggered.connect(self._window.quit_application)
+        menu.addAction(self._show_action)
+        menu.addAction(self._quit_action)
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_activated)
         self._tray.show()
@@ -45,12 +47,10 @@ class TrayController:
         if self._tray is None:
             return
         self._tray.setToolTip(t("tray.tooltip"))
-        menu = self._tray.contextMenu()
-        if menu is not None and menu.actions():
-            actions = menu.actions()
-            if len(actions) >= 2:
-                actions[0].setText(t("tray.show_window"))
-                actions[1].setText(t("tray.quit"))
+        if self._show_action is not None:
+            self._show_action.setText(t("tray.show_window"))
+        if self._quit_action is not None:
+            self._quit_action.setText(t("tray.quit"))
 
     def _show_window(self) -> None:
         self._window.show()
@@ -75,6 +75,7 @@ class TrayController:
             downloads_active=self._downloads_active(),
         ):
             return False
+        self._window._save_state_to_disk()
         self._window.hide()
         send_notification(t("app.title"), t("notify.minimized"))
         return True

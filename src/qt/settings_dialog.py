@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from ..i18n import get_available_languages, t
 from ..settings_constants import _BROWSER_LABELS, _BROWSERS, _THEMES
 from ..state import AppState
-from .theme import apply_theme, apply_ui_scale
+from .theme import apply_theme, apply_ui_scale, muted_color
 
 
 class SettingsDialog(QDialog):
@@ -67,7 +67,7 @@ class SettingsDialog(QDialog):
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
-        close_btn = QPushButton("OK")
+        close_btn = QPushButton(t("settings.ok"))
         close_btn.clicked.connect(self.accept)
         outer.addWidget(close_btn)
 
@@ -175,7 +175,7 @@ class SettingsDialog(QDialog):
 
         help_browser = QLabel(t("settings.browser_cookies_help"))
         help_browser.setWordWrap(True)
-        help_browser.setStyleSheet("color: gray; font-size: 11px;")
+        help_browser.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
         form.addRow(help_browser)
 
         cookie_row = QHBoxLayout()
@@ -193,7 +193,7 @@ class SettingsDialog(QDialog):
 
         help_cookie = QLabel(t("settings.cookie_file_help"))
         help_cookie.setWordWrap(True)
-        help_cookie.setStyleSheet("color: gray; font-size: 11px;")
+        help_cookie.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
         form.addRow(help_cookie)
 
         return group
@@ -209,7 +209,7 @@ class SettingsDialog(QDialog):
 
         help_portable = QLabel(t("settings.portable_help"))
         help_portable.setWordWrap(True)
-        help_portable.setStyleSheet("color: gray; font-size: 11px;")
+        help_portable.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
         form.addRow(help_portable)
 
         return group

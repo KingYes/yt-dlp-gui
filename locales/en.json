@@ -147,6 +147,8 @@
   "notify.downloading": "Downloading {done}/{total}",
 
   "section.error_enter_time": "Enter at least a start or end time.",
+  "section.error_start_before_end": "Start time must be before end time.",
+  "section.error_exceeds_duration": "Time exceeds video duration ({time}).",
   "section.error_invalid_start": "Invalid start time format.",
   "section.error_invalid_end": "Invalid end time format.",
 
@@ -154,6 +156,7 @@
   "manager.cancelled": "Download cancelled.",
 
   "settings.title": "Settings",
+  "settings.ok": "OK",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme:",
   "settings.theme_system": "System",

@@ -1,14 +1,14 @@
-{
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Run yt-dlp GUI",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "python": "${workspaceFolder}/venv/Scripts/python.exe",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}"
-        }
-    ]
-}
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run yt-dlp GUI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "python": "${command:python.interpreterPath}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

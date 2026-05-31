@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from ...i18n import t
 from ...utils import truncate_filename
+from ..theme import danger_color, muted_color, success_color
 
 
 class QueuePanel(QGroupBox):
@@ -35,26 +36,24 @@ class QueuePanel(QGroupBox):
 
         root = QVBoxLayout(self)
         header = QHBoxLayout()
-        self._title = QLabel(t("queue.title"))
-        self._title.setStyleSheet("font-weight: bold;")
-        header.addWidget(self._title, stretch=1)
+        header.addStretch(1)
 
         self._clear_btn = QPushButton(t("queue.clear"))
-        self._clear_btn.setStyleSheet("background-color: #dc3545;")
         self._clear_btn.clicked.connect(on_clear)
         self._clear_btn.hide()
 
         self._start_btn = QPushButton(t("queue.start"))
-        self._start_btn.setStyleSheet("background-color: #28a745;")
         self._start_btn.clicked.connect(on_start)
         self._start_btn.hide()
+
+        self._apply_button_colors()
 
         header.addWidget(self._clear_btn)
         header.addWidget(self._start_btn)
         root.addLayout(header)
 
         self._empty = QLabel(t("queue.empty"))
-        self._empty.setStyleSheet("color: gray;")
+        self._empty.setStyleSheet(f"color: {muted_color().name()};")
         root.addWidget(self._empty)
 
         self._scroll = QScrollArea()
@@ -67,6 +66,10 @@ class QueuePanel(QGroupBox):
         self._scroll.hide()
         root.addWidget(self._scroll)
 
+    def _apply_button_colors(self) -> None:
+        self._clear_btn.setStyleSheet(f"background-color: {danger_color().name()};")
+        self._start_btn.setStyleSheet(f"background-color: {success_color().name()};")
+
     def rebuild(self, queue: list[dict]) -> None:
         while self._scroll_layout.count():
             layout_item = self._scroll_layout.takeAt(0)
@@ -75,7 +78,7 @@ class QueuePanel(QGroupBox):
                 widget.deleteLater()
 
         if not queue:
-            self._title.setText(t("queue.title"))
+            self.setTitle(t("queue.title"))
             self._clear_btn.hide()
             self._start_btn.hide()
             self._scroll.hide()
@@ -83,7 +86,7 @@ class QueuePanel(QGroupBox):
             return
 
         self._empty.hide()
-        self._title.setText(t("queue.title_count", count=len(queue)))
+        self.setTitle(t("queue.title_count", count=len(queue)))
         self._clear_btn.show()
         self._start_btn.show()
         self._scroll.show()
@@ -121,7 +124,7 @@ class QueuePanel(QGroupBox):
 
             remove_btn = QPushButton("\u2715")
             remove_btn.setFixedSize(28, 22)
-            remove_btn.setStyleSheet("background-color: #dc3545;")
+            remove_btn.setStyleSheet(f"background-color: {danger_color().name()};")
             remove_btn.clicked.connect(lambda _checked=False, idx=i: self._on_remove(idx))
             row.addWidget(remove_btn)
 
@@ -129,9 +132,9 @@ class QueuePanel(QGroupBox):
 
     def retranslate_ui(self, queue_count: int = 0) -> None:
         if queue_count > 0:
-            self._title.setText(t("queue.title_count", count=queue_count))
+            self.setTitle(t("queue.title_count", count=queue_count))
         else:
-            self._title.setText(t("queue.title"))
+            self.setTitle(t("queue.title"))
         self._clear_btn.setText(t("queue.clear"))
         self._start_btn.setText(t("queue.start"))
         self._empty.setText(t("queue.empty"))

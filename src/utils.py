@@ -1,6 +1,8 @@
 import re
 from urllib.parse import parse_qs, urlparse
 
+from .i18n import t
+
 _URL_PATTERN = re.compile(
     r"^https?://"
     r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"
@@ -143,16 +145,16 @@ def validate_time_range(
     end_sec = parse_timestamp(end)
 
     if start_sec is None and end_sec is None:
-        return "Enter at least a start or end time."
+        return t("section.error_enter_time")
 
     if start_sec is not None and end_sec is not None and start_sec >= end_sec:
-        return "Start time must be before end time."
+        return t("section.error_start_before_end")
 
     if duration is not None:
         if start_sec is not None and start_sec >= duration:
-            return f"Start time exceeds video duration ({format_timestamp(duration)})."
+            return t("section.error_exceeds_duration", time=format_timestamp(duration))
         if end_sec is not None and end_sec > duration:
-            return f"End time exceeds video duration ({format_timestamp(duration)})."
+            return t("section.error_exceeds_duration", time=format_timestamp(duration))
 
     return None
 

@@ -7,6 +7,8 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
+from .theme import info_banner_bg, info_banner_fg
+
 
 class UpdateBanner(QFrame):
     def __init__(
@@ -21,9 +23,11 @@ class UpdateBanner(QFrame):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("updateBanner")
+        bg = info_banner_bg().name()
+        fg = info_banner_fg().name()
         self.setStyleSheet(
-            "#updateBanner { background-color: #d1ecf1; border-radius: 6px; }"
-            "QLabel { color: #0c5460; }"
+            f"#updateBanner {{ background-color: {bg}; border-radius: 6px; }}"
+            f"QLabel {{ color: {fg}; }}"
         )
         row = QHBoxLayout(self)
         row.setContentsMargins(12, 8, 12, 8)

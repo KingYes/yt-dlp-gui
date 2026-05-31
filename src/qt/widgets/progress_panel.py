@@ -29,7 +29,6 @@ class ProgressPanel(QGroupBox):
         parent: QWidget | None,
         *,
         on_open_folder: Callable[[], None],
-        on_view_changed: Callable[[str], None],
         on_retry_item: Callable[[int], None],
     ) -> None:
         super().__init__(parent)
@@ -168,9 +167,9 @@ class ProgressPanel(QGroupBox):
             row.addWidget(info)
 
             retry_btn = QPushButton(t("progress.retry"))
-            if item["status"] == "failed":
-                retry_btn.clicked.connect(lambda _c=False, idx=i: self._on_retry_item(idx))
-                row.addWidget(retry_btn)
+            retry_btn.clicked.connect(lambda _c=False, idx=i: self._on_retry_item(idx))
+            retry_btn.setVisible(item["status"] == "failed")
+            row.addWidget(retry_btn)
 
             self._detailed_layout.addWidget(row_w)
             self._detail_rows.append({
@@ -193,10 +192,7 @@ class ProgressPanel(QGroupBox):
         row["title_label"].setText(display)
         row["bar"].setValue(int(item["progress"] * 100))
         row["info_label"].setText(_status_text(item))
-        if item["status"] == "failed":
-            row["retry_btn"].show()
-        else:
-            row["retry_btn"].hide()
+        row["retry_btn"].setVisible(item["status"] == "failed")
 
 
 def _status_icon(style: QStyle, status: str) -> QIcon:

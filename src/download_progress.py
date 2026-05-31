@@ -101,6 +101,7 @@ def apply_progress_update(host: DownloadUIHost, data: dict) -> None:
 
 def apply_retry_progress(host: DownloadUIHost, data: dict, item_index: int) -> None:
     progress = host._progress
+    session = host._download_session
     items = progress.download_items
     if item_index >= len(items):
         return
@@ -119,7 +120,16 @@ def apply_retry_progress(host: DownloadUIHost, data: dict, item_index: int) -> N
 
     if progress.progress_view == "detailed":
         progress.update_detail_row(item_index)
-    apply_progress_update(host, data)
+
+    # Update simple-view progress using the retried item's index
+    # instead of delegating to apply_progress_update which uses
+    # session.current_item_index (potentially a different row).
+    saved_index = session.current_item_index
+    session.current_item_index = item_index
+    try:
+        apply_progress_update(host, data)
+    finally:
+        session.current_item_index = saved_index
 
 
 def on_item_finished(
