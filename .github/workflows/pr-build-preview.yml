@@ -1,0 +1,61 @@
+# TEMPORARY — delete after verifying PR builds (Windows EXE + macOS).
+# Mirrors .github/workflows/build.yml without release/Linux.
+
+name: PR Build Preview (temporary)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: yt-dlp-gui-windows
+            exe_name: yt-dlp-gui.exe
+          - os: macos-latest
+            artifact: yt-dlp-gui-macos
+            exe_name: yt-dlp-gui
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        shell: bash
+        run: |
+          ICON_ARGS=""
+          if [ -f assets/icon.ico ]; then
+            ICON_ARGS="--icon assets/icon.ico"
+          fi
+          pyinstaller --noconfirm --onefile --windowed \
+            --name "yt-dlp-gui" \
+            $ICON_ARGS \
+            --hidden-import PySide6 \
+            --collect-submodules PySide6 \
+            --collect-all src \
+            --add-data "locales:locales" \
+            --add-data "assets:assets" \
+            main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.exe_name }}
