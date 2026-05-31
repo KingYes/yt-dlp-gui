@@ -165,7 +165,7 @@ def _is_dark() -> bool:
     if app is not None:
         palette = app.palette()
         bg = palette.color(QPalette.ColorRole.Window)
-        return bg.lightnessF() < 0.5
+        return bool(bg.lightnessF() < 0.5)
     return False
 
 
