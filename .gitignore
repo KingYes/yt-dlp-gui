@@ -41,4 +41,6 @@ state.json
 # PyInstaller
 *.spec
 !yt-dlp-gui.spec
+!packaging/*.spec
 update-manifest.json
+release-windows/
