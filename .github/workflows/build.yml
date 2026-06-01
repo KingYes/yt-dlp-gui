@@ -49,12 +49,18 @@ jobs:
       - name: Build executable
         shell: bash
         run: |
+          ICON_ARGS=""
+          if [ -f assets/icon.ico ]; then
+            ICON_ARGS="--icon assets/icon.ico"
+          fi
           pyinstaller --noconfirm --onefile --windowed \
             --name "yt-dlp-gui" \
-            --hidden-import customtkinter \
-            --collect-data customtkinter \
+            $ICON_ARGS \
+            --hidden-import PySide6 \
+            --collect-submodules PySide6 \
             --collect-all src \
             --add-data "locales:locales" \
+            --add-data "assets:assets" \
             main.py
 
       - name: Upload artifact

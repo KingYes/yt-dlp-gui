@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .ffmpeg_utils import burn_subtitles_into_video, get_ffmpeg_location
-from .format_parser import _AUDIO_FORMATS, FORMAT_PRESETS
+from .format_parser import _AUDIO_FORMATS, FORMAT_PRESETS, is_audio_only_format
 from .utils import build_download_section_range, parse_rate_limit
 
 _MAX_RETRIES = 2
@@ -109,7 +109,7 @@ class DownloadManager:
         finished_files: list[str] | None = None,
         selected_chapters: list[str] | None = None,
         selected_subtitle_langs: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build yt-dlp options with a progress hook baked in.
 
         If *finished_files* is provided, filenames from "finished" progress
@@ -144,14 +144,15 @@ class DownloadManager:
         format_string: str = "",
         selected_chapters: list[str] | None = None,
         selected_subtitle_langs: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build yt-dlp options without progress hooks (caller adds them)."""
         if format_string:
             format_str = format_string
         else:
             format_str = FORMAT_PRESETS.get(format_key, "best")
-        is_audio_only = format_key == "Audio Only (mp3)"
+        is_audio_only = is_audio_only_format(format_key)
         settings = settings or {}
+        convert_format = settings.get("convert_format", "").strip()
 
         if split_chapters:
             outtmpl = str(Path(output_dir) / "%(title)s - %(section_title)s.%(ext)s")
@@ -202,10 +203,13 @@ class DownloadManager:
 
         postprocessors: list[dict] = []
 
+        # Audio-only: download best audio, then convert to MP3 by default (or audio codec from Convert)
         if is_audio_only:
+            audio_codec = convert_format if convert_format in _AUDIO_FORMATS else "mp3"
+            ydl_opts["keepvideo"] = False
             postprocessors.append({
                 "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
+                "preferredcodec": audio_codec,
                 "preferredquality": "192",
             })
 
@@ -218,9 +222,9 @@ class DownloadManager:
         if settings.get("embed_metadata"):
             postprocessors.append({"key": "FFmpegMetadata"})
 
-        convert_format = settings.get("convert_format", "").strip()
         if convert_format and not is_audio_only:
             if convert_format in _AUDIO_FORMATS:
+                ydl_opts["keepvideo"] = False
                 postprocessors.append({
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": convert_format,
@@ -314,6 +318,7 @@ class DownloadManager:
             finally:
                 if poller:
                     poller.stop()
+                self._thread = None
 
         self._thread = threading.Thread(target=_worker, daemon=True)
         self._thread.start()
@@ -403,6 +408,7 @@ class DownloadManager:
             finally:
                 if poller:
                     poller.stop()
+                self._thread = None
 
         self._thread = threading.Thread(target=_worker, daemon=True)
         self._thread.start()
@@ -505,6 +511,20 @@ class DownloadManager:
                 "status": "postprocessing",
                 "postprocessor": postprocessor,
                 "filename": info.get("filepath", ""),
+                "title": info.get("title", ""),
+            })
+        elif status == "finished":
+            callback({
+                "status": "postprocessing_done",
+                "postprocessor": postprocessor,
+                "filename": info.get("filepath", ""),
+                "title": info.get("title", ""),
+            })
+        elif status == "error":
+            callback({
+                "status": "postprocessing_error",
+                "postprocessor": postprocessor,
+                "error": data.get("error") or postprocessor,
                 "title": info.get("title", ""),
             })
 

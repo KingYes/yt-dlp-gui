@@ -1,5 +1,5 @@
 ---
-description: CustomTkinter UI layout and widget conventions
+description: PySide6/Qt UI layout and widget conventions
 globs: "**/*.py"
 alwaysApply: false
 ---
@@ -8,28 +8,35 @@ alwaysApply: false
 
 ## Layout
 
-- **Grid-based** layout throughout: `grid_columnconfigure(0, weight=1)` for stretch.
-- **Section builders** follow `_build_<section>_frame(self, row: int)` or `_build_<section>_section(parent, start_row) -> int`.
-- Main scroll container: `CTkScrollableFrame` with transparent background.
-- Section frames: `CTkFrame` with `fg_color="transparent"` for row groupings.
+- **QVBoxLayout / QHBoxLayout / QGridLayout** throughout.
+- Section widgets are **`QGroupBox`** subclasses with a translated title: `super().__init__(t("section.title"), parent)`.
+- Main scroll container: `QScrollArea` with `setWidgetResizable(True)`.
+- Inner grouping frames: plain `QWidget` with layout.
 
 ## Internationalization & RTL
 
 - All user-visible text uses `t("key")` — never hardcode strings in widgets.
-- RTL support: use `_anchor_start()`, `_sticky_start()` / `_sticky_end()`, `_c()` for column mirroring.
+- RTL support: `QApplication.setLayoutDirection(Qt.RightToLeft)` is set once on startup and language change. No manual column mirroring needed.
+- URL and time entry fields force `setLayoutDirection(Qt.LeftToRight)`.
 
 ## Widgets
 
 - Store widget references as `self._<name>` private attributes.
-- Use `CTkFont(size=..., weight="bold")` for consistent typography.
-- Bind widget values with `ctk.StringVar`, `ctk.BooleanVar`, `ctk.DoubleVar`.
+- Bind widget state with Qt signals/slots. Use `currentIndexChanged`, `toggled`, `textChanged`, etc.
+- For combo boxes with translatable labels, use `addItem(label, userData=key)` and read `currentData()` for the internal key.
 
 ## Dialogs
 
-- **Modal**: `CTkToplevel` with `transient(parent)` + `grab_set()`.
-- **Non-modal** pickers (subtitle, chapter): skip `grab_set()`.
+- **Modal**: `QDialog` with `exec()`.
+- **Non-modal** pickers (subtitle, chapter): `QDialog.show()` without `setModal(True)`.
+- **Settings**: `QDialog.show()` (non-modal).
 
-## Optional Dependencies
+## Thread-Safe UI Updates
 
-- Guard with `_HAS_DND` boolean from `try/except ImportError`.
-- Features silently skip when the optional dep is unavailable.
+- Worker threads call `_schedule_on_main(func)` which emits `_run_on_main` Signal.
+- `_exec_on_main` is connected on the main thread and executes the callback.
+
+## Theming
+
+- Use `QPalette` roles and semantic color helpers from `theme.py` (`danger_color()`, `success_color()`, `info_color()`, `muted_color()`).
+- Avoid hardcoded hex colors in stylesheets; they break on dark/light theme changes.

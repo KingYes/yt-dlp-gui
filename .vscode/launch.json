@@ -6,7 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
-            "python": "${workspaceFolder}/venv/bin/python3",
+            "python": "${command:python.interpreterPath}",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}"
         }

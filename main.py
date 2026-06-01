@@ -1,4 +1,12 @@
+"""yt-dlp GUI entry point."""
+
 import sys
+
+
+def _launch_gui() -> None:
+    from src.qt.app import run_qt_app
+
+    run_qt_app()
 
 
 def main() -> None:
@@ -6,10 +14,7 @@ def main() -> None:
         return
     sys._yt_dlp_gui_running = True  # type: ignore[attr-defined]
 
-    from src.app import App
-
-    app = App()
-    app.mainloop()
+    _launch_gui()
 
 
 if __name__ == "__main__":

@@ -25,7 +25,9 @@ alwaysApply: false
 - Use `threading.Event` and `threading.Barrier` for synchronization.
 - **Never use `time.sleep()`** — use `thread.join(timeout)` for waiting on background threads.
 
-## Scope
+## Qt / UI Tests
 
+- `conftest.py` sets `QT_QPA_PLATFORM=offscreen` for headless CI.
+- `pytest-qt` is available in `requirements-dev.txt` for widget tests.
 - Test **business logic and pure functions** thoroughly.
-- **No UI/widget tests** — CustomTkinter is not tested; mock I/O boundaries instead.
+- Qt widget tests are optional; mock I/O boundaries instead when possible.
