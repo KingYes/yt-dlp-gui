@@ -20,6 +20,8 @@ class UpdateBanner(QFrame):
         on_dismiss: Callable[[], None],
         download_label: str,
         dismiss_label: str,
+        on_install: Callable[[], None] | None = None,
+        install_label: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("updateBanner")
@@ -34,9 +36,12 @@ class UpdateBanner(QFrame):
         label = QLabel(message)
         label.setWordWrap(True)
         row.addWidget(label, stretch=1)
-        dl_btn = QPushButton(download_label)
-        dl_btn.clicked.connect(lambda: webbrowser.open(url))
-        row.addWidget(dl_btn)
+        action_btn = QPushButton(install_label if on_install and install_label else download_label)
+        if on_install is not None:
+            action_btn.clicked.connect(on_install)
+        else:
+            action_btn.clicked.connect(lambda: webbrowser.open(url))
+        row.addWidget(action_btn)
         dismiss_btn = QPushButton(dismiss_label)
         dismiss_btn.clicked.connect(on_dismiss)
         row.addWidget(dismiss_btn)

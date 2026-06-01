@@ -15,6 +15,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from src.install_layout import app_current_dir  # noqa: E402
+from src.updater import finalize_pending_manifest  # noqa: E402
 
 
 def _pid_alive(pid: int) -> bool:
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     _wait_for_pid(args.wait_pid)
     _swap_app_dir(args.install_root, args.staging)
+    finalize_pending_manifest(args.install_root)
 
     launcher = args.install_root / ("launcher.exe" if sys.platform == "win32" else "launcher")
     if launcher.is_file():
