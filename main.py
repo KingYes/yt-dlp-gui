@@ -2,6 +2,10 @@
 
 import sys
 
+from src.runtime_paths import configure_split_runtime
+
+configure_split_runtime()
+
 
 def _launch_gui() -> None:
     from src.qt.app import run_qt_app
