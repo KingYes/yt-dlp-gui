@@ -40,3 +40,4 @@ state.json
 
 # PyInstaller
 *.spec
+!yt-dlp-gui.spec
