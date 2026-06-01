@@ -30,6 +30,7 @@ class TestLoadDefaults:
         assert s.stats["total_downloads"] == 0
         assert s.history == []
         assert s.recent_folders == []
+        assert s.settings["check_for_updates"] is True
 
     def test_load_empty_file(self, tmp_path: Path) -> None:
         state_file = state_module._STATE_FILE

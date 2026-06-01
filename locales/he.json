@@ -202,6 +202,9 @@
   "settings.cookie_file_dialog_text": "קבצי טקסט",
   "settings.cookie_file_dialog_all": "כל הקבצים",
   "settings.advanced": "מתקדם",
+  "settings.updates": "[TODO] Updates",
+  "settings.check_for_updates": "[TODO] Check for updates automatically",
+  "settings.check_for_updates_help": "[TODO] Shows a banner when a newer release is available. Installed Windows builds can update in-app.",
   "settings.portable_mode": "מצב נייד (הגדרות ליד קובץ ההפעלה)",
   "settings.portable_help": "כאשר מופעל, ההגדרות נשמרות ליד האפליקציה במקום ~/.config/",
 

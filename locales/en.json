@@ -202,6 +202,9 @@
   "settings.cookie_file_dialog_text": "Text files",
   "settings.cookie_file_dialog_all": "All files",
   "settings.advanced": "Advanced",
+  "settings.updates": "Updates",
+  "settings.check_for_updates": "Check for updates automatically",
+  "settings.check_for_updates_help": "Shows a banner when a newer release is available. Installed Windows builds can update in-app.",
   "settings.portable_mode": "Portable mode (config next to executable)",
   "settings.portable_help": "When enabled, settings are stored next to the app instead of ~/.config/",
 

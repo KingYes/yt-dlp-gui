@@ -61,6 +61,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._appearance_group())
         layout.addWidget(self._download_group())
         layout.addWidget(self._network_group())
+        layout.addWidget(self._updates_group())
         layout.addWidget(self._advanced_group())
         layout.addStretch()
 
@@ -195,6 +196,22 @@ class SettingsDialog(QDialog):
         help_cookie.setWordWrap(True)
         help_cookie.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
         form.addRow(help_cookie)
+
+        return group
+
+    def _updates_group(self) -> QGroupBox:
+        group = QGroupBox(t("settings.updates"))
+        form = QFormLayout(group)
+
+        self._check_updates = QCheckBox(t("settings.check_for_updates"))
+        self._check_updates.setChecked(self._settings.get("check_for_updates", True))
+        self._check_updates.toggled.connect(lambda v: self._state.save_settings(check_for_updates=v))
+        form.addRow(self._check_updates)
+
+        help_updates = QLabel(t("settings.check_for_updates_help"))
+        help_updates.setWordWrap(True)
+        help_updates.setStyleSheet(f"color: {muted_color().name()}; font-size: 11px;")
+        form.addRow(help_updates)
 
         return group
 

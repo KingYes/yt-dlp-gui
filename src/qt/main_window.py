@@ -259,11 +259,12 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=_worker, daemon=True).start()
 
-        def _on_update(result: UpdateCheckResult) -> None:
-            if result.latest_version:
-                self._schedule_on_main(lambda: self._show_update_banner(result))
+        if self._state.settings.get("check_for_updates", True):
+            def _on_update(result: UpdateCheckResult) -> None:
+                if result.latest_version:
+                    self._schedule_on_main(lambda: self._show_update_banner(result))
 
-        check_for_update(_on_update)
+            check_for_update(_on_update)
 
     def _check_ytdlp_available(self) -> bool:
         try:
