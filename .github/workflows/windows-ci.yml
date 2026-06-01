@@ -1,0 +1,103 @@
+name: Windows CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Windows)
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Pytest
+        shell: pwsh
+        run: pytest
+
+  build:
+    name: Build installer (Windows)
+    runs-on: windows-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Windows release
+        shell: pwsh
+        env:
+          TAG: v0.0.0-ci
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./scripts/build_windows_release.ps1
+
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          $release = "release-windows"
+          $setup = Join-Path $release "yt-dlp-gui-setup.exe"
+          $manifest = Join-Path $release "update-manifest.json"
+          $appZip = Get-ChildItem -Path $release -Filter "yt-dlp-gui-windows-app-*.zip" | Select-Object -First 1
+
+          if (-not (Test-Path $setup)) { throw "Missing $setup" }
+          if (-not (Test-Path $manifest)) { throw "Missing $manifest" }
+          if (-not $appZip) { throw "Missing app zip in $release" }
+
+          python -c "import json; json.load(open(r'$manifest', encoding='utf-8'))"
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($appZip.FullName)
+          try {
+            $exe = $zip.Entries | Where-Object { $_.FullName -match 'yt-dlp-gui\.exe$' }
+            if (-not $exe) { throw "yt-dlp-gui.exe not found in $($appZip.Name)" }
+          } finally {
+            $zip.Dispose()
+          }
+
+          Write-Host "Verified:"
+          Write-Host "  $setup ($((Get-Item $setup).Length) bytes)"
+          Write-Host "  $($appZip.FullName) ($($appZip.Length) bytes)"
+          Write-Host "  $manifest"
+
+      - name: Upload Windows build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-windows-ci
+          path: release-windows/
+          retention-days: 14

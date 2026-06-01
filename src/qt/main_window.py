@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import threading
@@ -26,7 +27,7 @@ from ..download_session import DownloadSession
 from ..format_parser import FORMAT_PRESETS, build_format_string, normalize_format_preset, parse_formats
 from ..i18n import is_rtl, t
 from ..state import AppState
-from ..updater import APP_VERSION, check_for_update
+from ..updater import APP_VERSION, UpdateCheckResult, check_for_update, launch_update_helper
 from ..utils import (
     check_ffmpeg,
     classify_url,
@@ -46,6 +47,7 @@ from .setup_wizard_dialog import SetupWizardDialog
 from .theme import danger_color, info_color, muted_color
 from .tray import TrayController
 from .update_banner import UpdateBanner
+from .update_dialog import UpdateDialog
 from .widgets.format_panel import FormatPanel
 from .widgets.log_panel import LogPanel
 from .widgets.output_panel import OutputPanel
@@ -84,6 +86,8 @@ class MainWindow(QMainWindow):
         self._settings_dialog: SettingsDialog | None = None
         self._history_visible = False
         self._update_banner: UpdateBanner | None = None
+        self._pending_update_install_root: Path | None = None
+        self._pending_update_staging: Path | None = None
         self._content_layout: QVBoxLayout | None = None
 
         self._output_dir = str(Path.home() / "Downloads")
@@ -255,11 +259,12 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=_worker, daemon=True).start()
 
-        def _on_update(version: str | None, url: str | None) -> None:
-            if version and url:
-                self._schedule_on_main(lambda: self._show_update_banner(version, url))
+        if self._state.settings.get("check_for_updates", True):
+            def _on_update(result: UpdateCheckResult) -> None:
+                if result.latest_version:
+                    self._schedule_on_main(lambda: self._show_update_banner(result))
 
-        check_for_update(_on_update)
+            check_for_update(_on_update)
 
     def _check_ytdlp_available(self) -> bool:
         try:
@@ -289,7 +294,8 @@ class MainWindow(QMainWindow):
         if bin_dir.exists() and bin_str not in os.environ.get("PATH", ""):
             os.environ["PATH"] = bin_str + os.pathsep + os.environ.get("PATH", "")
 
-    def _show_update_banner(self, version: str, url: str) -> None:
+    def _show_update_banner(self, result: UpdateCheckResult) -> None:
+        version = result.latest_version or ""
         self._log(t("update.banner", version=version))
         if self._update_banner is not None or self._content_layout is None:
             return
@@ -299,15 +305,43 @@ class MainWindow(QMainWindow):
                 self._update_banner.deleteLater()
                 self._update_banner = None
 
+        on_install = None
+        install_label = None
+        if result.in_app_available and result.manifest is not None:
+            manifest = result.manifest
+
+            def _open_update_dialog() -> None:
+                self._show_update_dialog(manifest, version)
+
+            on_install = _open_update_dialog
+            install_label = t("update.install_now")
+
         self._update_banner = UpdateBanner(
             self._container,
             t("update.banner", version=version),
-            url,
+            result.release_url or "",
             on_dismiss=_dismiss,
             download_label=t("update.download"),
             dismiss_label=t("update.dismiss"),
+            on_install=on_install,
+            install_label=install_label,
         )
         self._content_layout.insertWidget(0, self._update_banner)
+
+    def _show_update_dialog(self, manifest: dict, version: str) -> None:
+        dialog = UpdateDialog(
+            self,
+            manifest,
+            version,
+            schedule_on_main=self._schedule_on_main,
+            on_ready_to_restart=self._on_update_ready_to_restart,
+        )
+        dialog.exec()
+
+    def _on_update_ready_to_restart(self, install_root: Path, staging: Path) -> None:
+        self._pending_update_install_root = install_root
+        self._pending_update_staging = staging
+        self.close()
 
     def _show_about(self) -> None:
         QMessageBox.about(self, t("app.title"), t("qt.about_text", version=APP_VERSION))
@@ -862,4 +896,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         self._shutdown()
+        if self._pending_update_install_root is not None and self._pending_update_staging is not None:
+            with contextlib.suppress(Exception):
+                launch_update_helper(self._pending_update_install_root, self._pending_update_staging)
         super().closeEvent(event)

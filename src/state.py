@@ -17,6 +17,13 @@ def _resolve_state_dir() -> Path:
     if portable_file.exists():
         return exe_dir
 
+    from .install_layout import installed_data_dir, resolve_install_root
+
+    install_root = resolve_install_root(exe_dir if getattr(sys, "frozen", False) else None)
+    data_dir = installed_data_dir(install_root)
+    if data_dir is not None:
+        return data_dir
+
     return Path.home() / ".config" / "yt-dlp-gui"
 
 
@@ -70,6 +77,7 @@ _DEFAULT_STATE: dict[str, Any] = {
         "subtitle_languages": "en",
         "subtitle_burn": False,
         "language": "en",
+        "check_for_updates": True,
     },
 }
 

@@ -13,14 +13,47 @@ env:
   TAG: ${{ inputs.version || github.ref_name }}
 
 jobs:
-  build:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Windows release
+        shell: pwsh
+        env:
+          TAG: ${{ env.TAG }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./scripts/build_windows_release.ps1
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-windows
+          path: release-windows/
+
+  build-unix:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            artifact: yt-dlp-gui-windows
-            exe_name: yt-dlp-gui.exe
           - os: macos-latest
             artifact: yt-dlp-gui-macos
             exe_name: yt-dlp-gui
@@ -70,7 +103,7 @@ jobs:
           path: dist/${{ matrix.exe_name }}
 
   release:
-    needs: build
+    needs: [build-windows, build-unix]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -83,7 +116,7 @@ jobs:
       - name: Generate changelog
         id: changelog
         env:
-          REPO_URL: https://github.com/KingYes/yt-dlp-gui
+          REPO_URL: https://github.com/${{ github.repository }}
         run: |
           TAG="${{ env.TAG }}"
           PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
@@ -116,14 +149,22 @@ jobs:
         with:
           path: artifacts
 
-      - name: Rename artifacts with platform suffix
+      - name: Prepare release files
         run: |
-          mv artifacts/yt-dlp-gui-windows/yt-dlp-gui.exe artifacts/yt-dlp-gui-windows.exe
+          VERSION="${TAG#v}"
           mv artifacts/yt-dlp-gui-macos/yt-dlp-gui artifacts/yt-dlp-gui-macos-bin
           mv artifacts/yt-dlp-gui-linux/yt-dlp-gui artifacts/yt-dlp-gui-linux-bin
           rmdir artifacts/yt-dlp-gui-macos artifacts/yt-dlp-gui-linux
           mv artifacts/yt-dlp-gui-macos-bin artifacts/yt-dlp-gui-macos
           mv artifacts/yt-dlp-gui-linux-bin artifacts/yt-dlp-gui-linux
+          mkdir -p release-upload
+          cp artifacts/yt-dlp-gui-windows/yt-dlp-gui-setup.exe release-upload/
+          cp artifacts/yt-dlp-gui-windows/update-manifest.json release-upload/
+          cp artifacts/yt-dlp-gui-windows/yt-dlp-gui-windows-app-"${VERSION}".zip release-upload/
+          cp artifacts/yt-dlp-gui-macos release-upload/yt-dlp-gui-macos
+          cp artifacts/yt-dlp-gui-linux release-upload/yt-dlp-gui-linux
+        env:
+          TAG: ${{ env.TAG }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -132,6 +173,8 @@ jobs:
           name: ${{ env.TAG }}
           body: ${{ steps.changelog.outputs.body }}
           files: |
-            artifacts/yt-dlp-gui-windows.exe
-            artifacts/yt-dlp-gui-macos
-            artifacts/yt-dlp-gui-linux
+            release-upload/yt-dlp-gui-setup.exe
+            release-upload/update-manifest.json
+            release-upload/yt-dlp-gui-windows-app-*.zip
+            release-upload/yt-dlp-gui-macos
+            release-upload/yt-dlp-gui-linux

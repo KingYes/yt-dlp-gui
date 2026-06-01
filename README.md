@@ -65,13 +65,14 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 - **Appearance**: theme (System / Dark / Light), UI scale (80%–150%), language selection (English, Hebrew — add more via JSON files)
 - **Download defaults**: speed limit, embed thumbnail, embed metadata, subtitle languages, clipboard monitoring, minimize to tray on close
 - **Network**: proxy support, browser cookies (Chrome, Firefox, Edge, Safari, Brave, Opera, Vivaldi), Netscape cookie file
+- **Updates**: optional automatic update checks; in-app install on Windows when using the online installer
 - **Advanced**: portable mode (config stored next to executable)
 
 ### System Integration
 
 - System tray icon with minimize-to-tray on close (always, or when downloads/queue are active)
 - OS-level notifications on download completion (macOS, Windows, Linux)
-- Auto-update check against GitHub releases with in-app banner
+- Auto-update check against GitHub releases; installed Windows builds update in-app from the banner
 - First-run setup wizard that downloads and installs FFmpeg automatically
 
 ### State Persistence
@@ -85,12 +86,19 @@ Download videos, audio, and playlists from YouTube and [hundreds of other sites]
 ### Download a Pre-built Release (Recommended)
 
 1. Go to the [Releases page](https://github.com/KingYes/yt-dlp-gui/releases)
-2. Download the binary for your platform:
-   - **Windows**: `yt-dlp-gui-windows.exe`
+2. Download the build for your platform:
+   - **Windows (recommended)**: `yt-dlp-gui-setup.exe` — small online installer; downloads PySide6 from PyPI and the app bundle on first run (no admin required)
+   - **Windows (legacy)**: older one-file builds may still appear as `yt-dlp-gui-windows.exe` on past releases
    - **macOS**: `yt-dlp-gui-macos`
    - **Linux**: `yt-dlp-gui-linux`
-3. Run the executable — no Python installation required
-4. On first launch, the app will offer to download FFmpeg automatically if it is not already installed
+3. **Windows installed app**: run `yt-dlp-gui-setup.exe`, then launch **yt-dlp GUI** from the Start Menu. Updates can be installed from the in-app banner (**Update now** → restart).
+4. **macOS / Linux**: run the executable directly — no Python installation required
+5. On first launch, the app offers to download FFmpeg automatically if it is not already installed
+
+Installed Windows layout:
+
+- App: `%LOCALAPPDATA%\\Programs\\yt-dlp-gui\\`
+- Settings and data: `%APPDATA%\\yt-dlp-gui\\`
 
 ### Build from Source
 
@@ -114,6 +122,8 @@ python main.py
 
 ### Building a Standalone Executable
 
+**macOS / Linux** (single file with bundled PySide6):
+
 ```bash
 pip install pyinstaller
 
@@ -127,7 +137,16 @@ pyinstaller --noconfirm --onefile --windowed \
   main.py
 ```
 
-The executable will be in the `dist/` directory.
+**Windows** (split runtime — app without PySide6, for the online installer):
+
+```powershell
+pip install -r requirements.txt pyinstaller
+pyinstaller --noconfirm yt-dlp-gui.spec
+# Full release folder (setup.exe, app zip, manifest): requires Inno Setup
+.\scripts\build_windows_release.ps1
+```
+
+The macOS/Linux executable will be in `dist/`. The Windows script writes to `release-windows/`.
 
 ## Running Tests
 
@@ -150,7 +169,10 @@ src/
   updater.py              Auto-update checker against GitHub releases
   utils.py                URL validation, format helpers, OS utilities
 locales/                  Translation JSON files (en.json, he.json, ...)
-scripts/build.ps1         Windows PyInstaller build helper
+scripts/build.ps1         Windows PyInstaller app build (yt-dlp-gui.spec)
+scripts/build_windows_release.ps1  Windows setup.exe + app zip + manifest
+scripts/installer.iss     Inno Setup script for yt-dlp-gui-setup.exe
+scripts/generate_update_manifest.py  PyPI PySide6 wheel URLs for update-manifest.json
 tests/                    Unit tests (pytest)
 pyproject.toml            Ruff, mypy, and pytest configuration
 requirements.txt          Runtime dependencies
