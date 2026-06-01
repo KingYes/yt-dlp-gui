@@ -105,7 +105,7 @@ def _local_manifest(install_root: Path) -> dict[str, Any] | None:
     path = install_root / "manifest.json"
     if not path.is_file():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
 
 def _should_refresh_runtime(manifest: dict[str, Any], install_root: Path) -> bool:

@@ -26,17 +26,18 @@ def runtime_is_ready(path: Path) -> bool:
 
 def load_manifest(source: str | Path) -> dict[str, Any]:
     if isinstance(source, Path):
-        return json.loads(source.read_text(encoding="utf-8"))
+        return json.loads(source.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
     text = source.strip()
     if text.startswith("{"):
-        return json.loads(text)
+        return json.loads(text)  # type: ignore[no-any-return]
 
     if text.startswith(("http://", "https://")):
         with urllib.request.urlopen(text, timeout=30) as resp:
-            return json.load(resp)
+            data: dict[str, Any] = json.load(resp)
+            return data
 
-    return json.loads(Path(text).read_text(encoding="utf-8"))
+    return json.loads(Path(text).read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
 
 def _noop_progress(phase: str, current: int, total: int) -> None:

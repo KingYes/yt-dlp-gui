@@ -162,7 +162,7 @@ def ui_scale_factor(settings: dict[str, Any]) -> float:
 
 def _is_dark() -> bool:
     app = QApplication.instance()
-    if app is not None:
+    if isinstance(app, QApplication):
         palette = app.palette()
         bg = palette.color(QPalette.ColorRole.Window)
         return bool(bg.lightnessF() < 0.5)

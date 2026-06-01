@@ -86,7 +86,8 @@ def _latest_pypi_version(package: str, *, minimum: str) -> str:
     if not versions:
         msg = f"No {package} release found matching >={minimum}"
         raise ValueError(msg)
-    return max(versions, key=_parse_version_tuple)
+    best: str = max(versions, key=_parse_version_tuple)
+    return best
 
 
 def _parse_version_tuple(version: str) -> tuple[int, ...]:
@@ -105,7 +106,8 @@ def fetch_pypi_release(package: str, version: str) -> dict[str, Any]:
     url = _PYPI_JSON.format(package=package, version=version)
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:
-            return json.load(resp)
+            data: dict[str, Any] = json.load(resp)
+            return data
     except urllib.error.HTTPError as exc:
         msg = f"PyPI release not found for {package} {version}: {exc.code}"
         raise ValueError(msg) from exc
