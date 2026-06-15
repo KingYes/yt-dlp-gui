@@ -25,8 +25,8 @@ jobs:
       - name: Check for newer yt-dlp
         id: check
         run: |
-          latest=$(pip index versions yt-dlp 2>/dev/null | head -1 | sed 's/.*(\(.*\))/\1/')
-          current=$(grep '^yt-dlp' requirements.txt | sed 's/.*>=\(.*\)/\1/')
+          latest=$(python -m pip index versions yt-dlp 2>/dev/null | head -1 | sed 's/.*(\(.*\))/\1/')
+          current=$(grep '^yt-dlp' requirements.txt | sed -E 's/^yt-dlp>=//')
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           echo "current=$current" >> "$GITHUB_OUTPUT"
           if [ "$latest" != "$current" ]; then
@@ -45,37 +45,39 @@ jobs:
         if: steps.check.outputs.needs_bump == 'true'
         run: |
           python - <<'PYEOF'
+          import os
           import re
           from pathlib import Path
 
           path = Path("pyproject.toml")
           text = path.read_text()
           match = re.search(r'version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', text)
+          if match is None:
+              raise SystemExit("Could not find version in pyproject.toml")
           major, minor, patch = match.groups()
           new_version = f"{major}.{minor}.{int(patch) + 1}"
           text = text.replace(match.group(0), f'version = "{new_version}"')
           path.write_text(text)
           print(f"Bumped version to {new_version}")
 
-          import subprocess
-          subprocess.run(
-              ["bash", "-c", f'echo "version={new_version}" >> "$GITHUB_OUTPUT"'],
-              check=True,
-          )
+          github_output = os.environ.get("GITHUB_OUTPUT")
+          if github_output:
+              with open(github_output, "a", encoding="utf-8") as f:
+                  f.write(f"version={new_version}\n")
           PYEOF
 
       - name: Update updater.py
         if: steps.check.outputs.needs_bump == 'true'
         run: |
-          sed -i "s/^APP_VERSION = .*/APP_VERSION = \"${{ steps.version.outputs.version }}\"/" updater.py
+          sed -i "s/^APP_VERSION = .*/APP_VERSION = \"${{ steps.version.outputs.version }}\"/" src/updater.py
 
       - name: Commit, tag, and push
         if: steps.check.outputs.needs_bump == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add requirements.txt pyproject.toml updater.py
-          git commit -m "bump yt-dlp to ${{ steps.check.outputs.latest }}"
+          git add requirements.txt pyproject.toml src/updater.py
+          git commit -m "Tweak: Bump yt-dlp to ${{ steps.check.outputs.latest }}"
           git tag "v${{ steps.version.outputs.version }}"
           git push origin HEAD "v${{ steps.version.outputs.version }}"
 
