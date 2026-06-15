@@ -25,6 +25,26 @@ def _get_yt_dlp() -> Any:
     return _yt_dlp
 
 
+_PROXY_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+
+
+def _normalise_proxy(value: str) -> str | None:
+    """Return a yt-dlp proxy string, or None if invalid/empty.
+
+    yt-dlp expects a full proxy URL (e.g. "http://127.0.0.1:8080", "socks5://host:1080").
+    For convenience, accept "host:port" and treat it as an HTTP proxy.
+    """
+    proxy = value.strip()
+    if not proxy:
+        return None
+    if _PROXY_SCHEME_RE.match(proxy):
+        return proxy
+    # Allow "host:port" without scheme.
+    if re.fullmatch(r"[^/\s:]+:\d+", proxy):
+        return f"http://{proxy}"
+    return None
+
+
 class _FileProgressPoller:
     """Polls .part file size to synthesise progress events for range downloads.
 
@@ -188,7 +208,7 @@ class DownloadManager:
         if rate:
             ydl_opts["ratelimit"] = rate
 
-        proxy = settings.get("proxy", "").strip()
+        proxy = _normalise_proxy(str(settings.get("proxy", "")))
         if proxy:
             ydl_opts["proxy"] = proxy
 
